@@ -4,6 +4,7 @@ import type { Player, ClubStint } from "../types/player.js";
 interface Row {
   id: string;
   name: string;
+  date_of_birth: string | null;
   nationality: string | null;
   club_id: string;
   club_name: string;
@@ -15,6 +16,7 @@ export async function loadPlayersFromDb(): Promise<Player[]> {
     SELECT
       p.id,
       p.name,
+      to_char(p.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
       p.nationality,
       pcs.club_id,
       c.name AS club_name,
@@ -33,6 +35,7 @@ export async function loadPlayersFromDb(): Promise<Player[]> {
       player = {
         id: row.id,
         name: row.name,
+        dateOfBirth: row.date_of_birth ?? undefined,
         nationality: row.nationality ?? undefined,
         clubs: [],
       };

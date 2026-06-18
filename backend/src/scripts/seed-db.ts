@@ -1,10 +1,14 @@
 /**
  * Seeds Neon DB from the existing hardcoded player data.
  * Run with: DATABASE_URL=... npx tsx src/scripts/seed-db.ts
+ *
+ * Routes every player through the identity resolver so the seed shares the same
+ * dedup logic as the API importer (source = "seed").
  */
 import { neon } from "@neondatabase/serverless";
 import { players } from "../data/index.js";
 import { slugify } from "../utils/string.js";
+import { createIdentityResolver } from "../db/player-identity.js";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -16,12 +20,12 @@ const sql = neon(DATABASE_URL);
 
 async function seed() {
   console.log(`Seeding ${players.length} players...`);
+  const resolver = createIdentityResolver(sql);
 
   const clubs = new Map<string, string>();
   for (const player of players) {
     for (const stint of player.clubs) {
-      const clubId = slugify(stint.club);
-      clubs.set(clubId, stint.club);
+      clubs.set(slugify(stint.club), stint.club);
     }
   }
 
@@ -36,18 +40,19 @@ async function seed() {
 
   console.log("Upserting players...");
   for (const player of players) {
-    await sql`
-      INSERT INTO players (id, name, nationality)
-      VALUES (${player.id}, ${player.name}, ${player.nationality ?? null})
-      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, nationality = EXCLUDED.nationality
-    `;
+    const playerId = await resolver.resolveOrCreatePlayer({
+      name: player.name,
+      dateOfBirth: player.dateOfBirth ?? null,
+      nationality: player.nationality ?? null,
+      source: "seed",
+    });
 
     for (const stint of player.clubs) {
       const clubId = slugify(stint.club);
       for (const season of stint.seasons) {
         await sql`
           INSERT INTO player_club_seasons (player_id, club_id, season)
-          VALUES (${player.id}, ${clubId}, ${season})
+          VALUES (${playerId}, ${clubId}, ${season})
           ON CONFLICT DO NOTHING
         `;
       }

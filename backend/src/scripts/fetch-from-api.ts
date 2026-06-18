@@ -9,7 +9,8 @@
  * Free tier limit: 10 requests/minute. We use 8s delays (~7.5 req/min) to stay safe.
  */
 import { neon } from "@neondatabase/serverless";
-import { slugify, normalize } from "../utils/string.js";
+import { slugify } from "../utils/string.js";
+import { createIdentityResolver } from "../db/player-identity.js";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const API_KEY = process.env.FOOTBALL_DATA_API_KEY;
@@ -20,6 +21,8 @@ if (!DATABASE_URL || !API_KEY) {
 }
 
 const sql = neon(DATABASE_URL);
+const resolver = createIdentityResolver(sql);
+const SOURCE = "football-data";
 const BASE_URL = "https://api.football-data.org/v4";
 
 // Seasons to fetch: 2019-20 through 2024-25
@@ -147,30 +150,21 @@ async function main() {
         team.squad = teamData.squad;
       }
 
-      let newPlayers = 0;
-      let newRows = 0;
-
       for (const apiPlayer of team.squad) {
-        const playerId = slugify(apiPlayer.name);
-        const nationality = apiPlayer.nationality ?? null;
+        const playerId = await resolver.resolveOrCreatePlayer({
+          name: apiPlayer.name,
+          dateOfBirth: apiPlayer.dateOfBirth ?? null,
+          nationality: apiPlayer.nationality ?? null,
+          source: SOURCE,
+          externalId: String(apiPlayer.id),
+        });
 
         await sql`
-          INSERT INTO players (id, name, nationality)
-          VALUES (${playerId}, ${apiPlayer.name}, ${nationality})
-          ON CONFLICT (id) DO UPDATE SET
-            name = EXCLUDED.name,
-            nationality = COALESCE(EXCLUDED.nationality, players.nationality)
-        `;
-
-        const result = await sql`
           INSERT INTO player_club_seasons (player_id, club_id, season)
           VALUES (${playerId}, ${clubId}, ${season})
           ON CONFLICT DO NOTHING
         `;
 
-        newPlayers++;
-        // @ts-ignore - neon returns affected rows
-        if (result.length === 0) newRows++;
         totalRows++;
         totalPlayers++;
       }

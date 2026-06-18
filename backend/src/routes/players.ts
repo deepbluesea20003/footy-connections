@@ -16,6 +16,7 @@ export function createPlayersRouter(searchService: PlayerSearchService): Router 
       players: results.map((p) => ({
         id: p.id,
         name: p.name,
+        dateOfBirth: p.dateOfBirth ?? null,
         clubs: [...new Set(p.clubs.map((c) => c.club))],
       })),
     });
