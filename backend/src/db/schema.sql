@@ -36,3 +36,26 @@ CREATE TABLE IF NOT EXISTS player_club_seasons (
 
 CREATE INDEX IF NOT EXISTS idx_pcs_player ON player_club_seasons(player_id);
 CREATE INDEX IF NOT EXISTS idx_pcs_club_season ON player_club_seasons(club_id, season);
+
+-- Checkpointing for the resumable Wikidata importer (also self-created by the
+-- script via ensureSchema). import_jobs holds the discovery cursor + phase;
+-- import_club_queue is the per-club work queue.
+CREATE TABLE IF NOT EXISTS import_jobs (
+  id               TEXT PRIMARY KEY,
+  phase            TEXT NOT NULL DEFAULT 'discovery',
+  discovery_cursor TEXT NOT NULL DEFAULT '',
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS import_club_queue (
+  club_qid     TEXT PRIMARY KEY,
+  club_name    TEXT,
+  status       TEXT NOT NULL DEFAULT 'pending',  -- pending | done | error
+  member_rows  INT,
+  season_rows  INT,
+  attempts     INT NOT NULL DEFAULT 0,
+  last_error   TEXT,
+  processed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_icq_status ON import_club_queue(status);
