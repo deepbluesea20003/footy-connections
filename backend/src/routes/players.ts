@@ -1,0 +1,25 @@
+import { Router } from "express";
+import { PlayerSearchService } from "../services/player-search.js";
+
+export function createPlayersRouter(searchService: PlayerSearchService): Router {
+  const router = Router();
+
+  router.get("/players/search", (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q : "";
+    if (q.length < 1) {
+      res.json({ players: [] });
+      return;
+    }
+
+    const results = searchService.search(q, 10);
+    res.json({
+      players: results.map((p) => ({
+        id: p.id,
+        name: p.name,
+        clubs: [...new Set(p.clubs.map((c) => c.club))],
+      })),
+    });
+  });
+
+  return router;
+}
