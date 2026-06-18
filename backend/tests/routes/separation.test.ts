@@ -1,6 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
-import { app } from "../../src/app.js";
+import { app, initApp } from "../../src/app.js";
+
+beforeAll(async () => {
+  await initApp();
+});
 
 describe("POST /api/separation", () => {
   it("returns a path between known players", async () => {
