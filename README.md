@@ -49,9 +49,19 @@ is checkpointed, so it resumes after any interruption (SIGTERM/crash/preemption)
 Tunable via env: `MIN_SEASON_YEAR`, `WIKIDATA_DELAY_MS`, `DISCOVERY_MAX_PAGES`,
 `PROCESS_LIMIT`, `PROCESS_BATCH`, `WIKIDATA_UA`.
 
-Run on GCP as a Cloud Run Job (see `backend/Dockerfile.job` for build/deploy
-commands). Reset for a clean re-import with
-`TRUNCATE import_club_queue; DELETE FROM import_jobs;`.
+**Run it in the cloud (recommended)** — don't fill the DB from a laptop. One
+command builds the importer with Cloud Build (no local Docker), deploys it as a
+GCP Cloud Run Job, and fires it off:
+
+```bash
+gcloud auth login && gcloud config set project YOUR_PROJECT_ID
+./backend/deploy-importer.sh             # build → deploy → execute once
+./backend/deploy-importer.sh --schedule  # also auto-run daily until complete
+```
+
+It's resumable and self-limiting (stops at the storage budget), so re-running
+just continues. Stays inside GCP's free tier — see the script header for details.
+Reset for a clean re-import with `TRUNCATE import_club_queue; DELETE FROM import_jobs;`.
 
 ## Testing
 
