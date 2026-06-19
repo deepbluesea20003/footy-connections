@@ -57,4 +57,17 @@ describe("findShortestPath", () => {
     expect(result!.path[1].club).toBe("Club B");
     expect(result!.path[1].season).toBe("2024-25");
   });
+
+  it("propagates Wikidata player + club ids into path steps", () => {
+    const players: Player[] = [
+      { id: "a", name: "A", wikidataId: "Q1", clubs: [{ club: "FC X", clubId: "Q100", seasons: ["2020-21"] }] },
+      { id: "b", name: "B", wikidataId: "Q2", clubs: [{ club: "FC X", clubId: "Q100", seasons: ["2020-21"] }] },
+    ];
+    const g = buildGraph(players);
+    const result = findShortestPath(g, "a", "b", new Map(players.map((p) => [p.id, p])));
+    expect(result!.path[0].playerWikidataId).toBe("Q1");
+    expect(result!.path[1].playerWikidataId).toBe("Q2");
+    expect(result!.path[1].clubId).toBe("Q100"); // connecting club id
+    expect(result!.path[0].clubId).toBeNull(); // start node has no incoming club
+  });
 });

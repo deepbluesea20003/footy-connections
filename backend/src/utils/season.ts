@@ -38,6 +38,11 @@ export interface SeasonRangeOpts {
   assumeActiveWithinYears?: number;
 }
 
+/** No real one-club stint runs longer than this. A backstop against vandalised
+ *  date ranges (e.g. Wikidata end-years of 2078/2625/20009) turning a single bad
+ *  statement into decades of phantom squad membership and false teammate edges. */
+const MAX_STINT_YEARS = 30;
+
 /**
  * The start year of the last full season a leave-date covers. Year-precision
  * (exact Jan-1) means "left during that year", so the last full season started
@@ -60,15 +65,28 @@ export function seasonsBetween(
   const sy = seasonStartYear(start);
   if (sy === null) return []; // unbounded start → cannot place; skip
 
-  // ey is null when the end is missing OR unparseable (e.g. a garbage value).
-  let ey = endSeasonStartYear(end);
-  if (ey === null) {
+  const endProvided = end != null && String(end).trim() !== "";
+  const rawEy = endSeasonStartYear(end);
+
+  let ey: number;
+  if (rawEy !== null && rawEy >= sy && rawEy <= opts.currentSeasonStartYear) {
+    // A plausible recorded end date.
+    ey = rawEy;
+  } else if (endProvided) {
+    // An end qualifier exists but is implausible — in the future (e.g. a
+    // vandalised "2078"), before the start, or unparseable. The stint is
+    // genuinely bounded (it's not an open-ended "still here"), so don't fill to
+    // the present: keep only the start season to contain the bad statement.
+    ey = sy;
+  } else {
+    // No end qualifier at all — the player may still be there. Extend to the
+    // present only if the stint started recently; otherwise keep the start season.
     const within = opts.assumeActiveWithinYears ?? 25;
     ey = opts.currentSeasonStartYear - sy <= within ? opts.currentSeasonStartYear : sy;
   }
 
   const from = Math.max(sy, opts.minYear);
-  const to = Math.min(ey, opts.currentSeasonStartYear);
+  const to = Math.min(ey, opts.currentSeasonStartYear, sy + MAX_STINT_YEARS);
 
   const seasons: string[] = [];
   for (let y = from; y <= to; y++) seasons.push(seasonLabel(y));

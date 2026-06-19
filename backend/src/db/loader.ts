@@ -6,40 +6,81 @@ interface Row {
   name: string;
   date_of_birth: string | null;
   nationality: string | null;
+  wikidata_id: string | null;
   club_id: string;
   club_name: string;
   season: string;
 }
 
+// Neon's serverless HTTP driver has a ~10 MB response limit per query.
+// 50K rows × ~200 bytes/row JSON ≈ 10 MB which is right on the edge and
+// causes AggregateError on cold starts. 8K rows ≈ 1.6 MB is safely under.
+const PAGE = 8000;
+
+async function fetchPage(
+  cId: string,
+  cClub: string,
+  cSeason: string
+): Promise<(Row & { club_id: string })[]> {
+  const MAX_RETRIES = 4;
+  let delay = 1000;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return (await sql`
+        SELECT
+          p.id,
+          p.name,
+          to_char(p.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
+          p.nationality,
+          pei.external_id AS wikidata_id,
+          pcs.club_id,
+          c.name AS club_name,
+          pcs.season
+        FROM players p
+        JOIN player_club_seasons pcs ON p.id = pcs.player_id
+        JOIN clubs c ON pcs.club_id = c.id
+        LEFT JOIN player_external_ids pei
+          ON pei.player_id = p.id AND pei.source = 'wikidata'
+        WHERE (p.id, pcs.club_id, pcs.season) > (${cId}, ${cClub}, ${cSeason})
+        ORDER BY p.id, pcs.club_id, pcs.season
+        LIMIT ${PAGE}
+      `) as (Row & { club_id: string })[];
+    } catch (err) {
+      if (attempt === MAX_RETRIES) throw err;
+      console.warn(`⚠️  Page fetch attempt ${attempt} failed (${(err as Error).message}), retrying in ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+  throw new Error("unreachable");
+}
+
 export async function loadPlayersFromDb(): Promise<Player[]> {
   const playerMap = new Map<string, Player>();
-  const PAGE = 50000;
+
+  console.log("📦 Starting player loading...");
 
   // Cursor-paginate on the full ORDER BY tuple so a player's rows can span page
-  // boundaries without loss — a single query over ~1M+ join rows would be slow
-  // and can be truncated by the serverless HTTP driver. Accumulating into a Map
-  // means split players merge correctly.
+  // boundaries without loss — a single query over ~1.9M join rows would exceed
+  // Neon's serverless HTTP response limit. Accumulating into a Map means split
+  // players merge correctly across page boundaries.
   let cId = "";
   let cClub = "";
   let cSeason = "";
+  let totalRowsProcessed = 0;
+  let pageCount = 0;
+
   for (;;) {
-    const rows = (await sql`
-      SELECT
-        p.id,
-        p.name,
-        to_char(p.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
-        p.nationality,
-        pcs.club_id,
-        c.name AS club_name,
-        pcs.season
-      FROM players p
-      JOIN player_club_seasons pcs ON p.id = pcs.player_id
-      JOIN clubs c ON pcs.club_id = c.id
-      WHERE (p.id, pcs.club_id, pcs.season) > (${cId}, ${cClub}, ${cSeason})
-      ORDER BY p.id, pcs.club_id, pcs.season
-      LIMIT ${PAGE}
-    `) as (Row & { club_id: string })[];
-    if (rows.length === 0) break;
+    pageCount++;
+    const rows = await fetchPage(cId, cClub, cSeason);
+    
+    if (rows.length === 0) {
+      console.log(`✅ Page ${pageCount}: No more rows. Finishing pagination.`);
+      break;
+    }
+
+    totalRowsProcessed += rows.length;
+    console.log(`📄 Page ${pageCount}: Loaded ${rows.length} rows (${totalRowsProcessed} total)`);
 
     for (const row of rows) {
       let player = playerMap.get(row.id);
@@ -49,6 +90,7 @@ export async function loadPlayersFromDb(): Promise<Player[]> {
           name: row.name,
           dateOfBirth: row.date_of_birth ?? undefined,
           nationality: row.nationality ?? undefined,
+          wikidataId: row.wikidata_id ?? undefined,
           clubs: [],
         };
         playerMap.set(row.id, player);
@@ -56,7 +98,7 @@ export async function loadPlayersFromDb(): Promise<Player[]> {
 
       let stint = player.clubs.find((s) => s.club === row.club_name);
       if (!stint) {
-        stint = { club: row.club_name, seasons: [] };
+        stint = { club: row.club_name, clubId: row.club_id, seasons: [] };
         player.clubs.push(stint);
       }
       if (!stint.seasons.includes(row.season)) {
@@ -71,7 +113,10 @@ export async function loadPlayersFromDb(): Promise<Player[]> {
     if (rows.length < PAGE) break;
   }
 
-  return [...playerMap.values()];
+  const players = [...playerMap.values()];
+  console.log(`✨ Loading complete: ${players.length} unique players loaded (${totalRowsProcessed} rows)`);
+  
+  return players;
 }
 
 export async function getPlayerCount(): Promise<number> {

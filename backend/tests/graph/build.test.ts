@@ -5,42 +5,46 @@ import { testPlayers } from "../helpers/fixtures.js";
 describe("buildGraph", () => {
   const graph = buildGraph(testPlayers);
 
-  it("connects players at the same club in the same season", () => {
-    const aliceEdges = graph.get("alice")!;
-    const bobEdge = aliceEdges.find((e) => e.playerId === "bob");
-    expect(bobEdge).toBeDefined();
-    expect(bobEdge!.sharedClubSeasons).toContainEqual({
-      club: "Club A",
-      season: "2023-24",
-    });
+  it("groups players who share a club-season into the same roster", () => {
+    const aliceNodes = graph.playerToSeasons.get("alice")!;
+    const clubA2324 = aliceNodes.find(
+      (n) => n.club === "Club A" && n.season === "2023-24"
+    )!;
+    expect(clubA2324.roster).toContain("bob");
   });
 
-  it("does not connect players at the same club but different seasons", () => {
-    const bobEdges = graph.get("bob")!;
-    const daveEdge = bobEdges.find((e) => e.playerId === "dave");
-    expect(daveEdge).toBeUndefined();
+  it("does not group players from the same club but different seasons", () => {
+    // bob is Club B 2024-25; dave is Club B 2023-24 — different nodes.
+    const bobNodes = graph.playerToSeasons.get("bob")!;
+    const bobClubB = bobNodes.find((n) => n.club === "Club B")!;
+    expect(bobClubB.season).toBe("2024-25");
+    expect(bobClubB.roster).not.toContain("dave");
   });
 
-  it("does not connect players at different clubs", () => {
-    const aliceEdges = graph.get("alice")!;
-    const carolEdge = aliceEdges.find((e) => e.playerId === "carol");
-    expect(carolEdge).toBeUndefined();
+  it("does not link players at different clubs", () => {
+    const aliceNodes = graph.playerToSeasons.get("alice")!;
+    const reachable = new Set(aliceNodes.flatMap((n) => n.roster));
+    expect(reachable.has("carol")).toBe(false);
   });
 
-  it("stores multiple shared club-seasons on a single edge", () => {
-    const aliceEdges = graph.get("alice")!;
-    const bobEdge = aliceEdges.find((e) => e.playerId === "bob");
-    expect(bobEdge!.sharedClubSeasons).toHaveLength(1);
+  it("shares one node object across everyone in a club-season", () => {
+    const aliceNodes = graph.playerToSeasons.get("alice")!;
+    const bobNodes = graph.playerToSeasons.get("bob")!;
+    const aliceA = aliceNodes.find(
+      (n) => n.club === "Club A" && n.season === "2023-24"
+    );
+    const bobA = bobNodes.find(
+      (n) => n.club === "Club A" && n.season === "2023-24"
+    );
+    expect(aliceA).toBe(bobA);
   });
 
-  it("creates bidirectional edges", () => {
-    const bobEdges = graph.get("bob")!;
-    const aliceEdge = bobEdges.find((e) => e.playerId === "alice");
-    expect(aliceEdge).toBeDefined();
-  });
-
-  it("includes isolated players as nodes with no edges", () => {
-    expect(graph.has("frank")).toBe(true);
-    expect(graph.get("frank")!).toHaveLength(0);
+  it("registers isolated players as nodes with no teammates", () => {
+    expect(graph.playerToSeasons.has("frank")).toBe(true);
+    const frankNodes = graph.playerToSeasons.get("frank")!;
+    const teammates = frankNodes
+      .flatMap((n) => n.roster)
+      .filter((id) => id !== "frank");
+    expect(teammates).toHaveLength(0);
   });
 });

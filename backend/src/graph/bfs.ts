@@ -1,19 +1,22 @@
 import type { Player } from "../types/player.js";
-import type { AdjacencyList, SeparationResult, PathStep } from "../types/graph.js";
+import type { BipartiteGraph, SeparationResult, PathStep } from "../types/graph.js";
 
 interface ParentEntry {
   parentId: string | null;
   club: string;
+  clubId?: string;
   season: string;
 }
 
 export function findShortestPath(
-  graph: AdjacencyList,
+  graph: BipartiteGraph,
   startId: string,
   endId: string,
   playerLookup: Map<string, Player>
 ): SeparationResult | null {
-  if (!graph.has(startId) || !graph.has(endId)) {
+  const { playerToSeasons } = graph;
+
+  if (!playerToSeasons.has(startId) || !playerToSeasons.has(endId)) {
     return null;
   }
 
@@ -22,7 +25,16 @@ export function findShortestPath(
     return {
       found: true,
       separationNumber: 0,
-      path: [{ player: player.name, playerId: player.id, club: "", season: "" }],
+      path: [
+        {
+          player: player.name,
+          playerId: player.id,
+          playerWikidataId: player.wikidataId ?? null,
+          club: "",
+          clubId: null,
+          season: "",
+        },
+      ],
     };
   }
 
@@ -30,39 +42,38 @@ export function findShortestPath(
   const parent = new Map<string, ParentEntry>();
   parent.set(startId, { parentId: null, club: "", season: "" });
 
+  // Head-index queue rather than Array.shift() — shift() is O(n), which would
+  // make BFS O(n²) on the full ~224k-player graph.
   const queue: string[] = [startId];
+  let head = 0;
 
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const edges = graph.get(current);
-    if (!edges) continue;
+  while (head < queue.length) {
+    const current = queue[head++];
 
-    for (const edge of edges) {
-      if (visited.has(edge.playerId)) continue;
-      visited.add(edge.playerId);
+    // Expand through each club-season node the player belongs to; everyone in
+    // that node's roster is a direct teammate.
+    for (const node of playerToSeasons.get(current)!) {
+      for (const teammateId of node.roster) {
+        if (visited.has(teammateId)) continue;
+        visited.add(teammateId);
 
-      const bestRef = pickBestClubSeason(edge.sharedClubSeasons);
-      parent.set(edge.playerId, {
-        parentId: current,
-        club: bestRef.club,
-        season: bestRef.season,
-      });
+        parent.set(teammateId, {
+          parentId: current,
+          club: node.club,
+          clubId: node.clubId,
+          season: node.season,
+        });
 
-      if (edge.playerId === endId) {
-        return reconstructPath(parent, startId, endId, playerLookup);
+        if (teammateId === endId) {
+          return reconstructPath(parent, startId, endId, playerLookup);
+        }
+
+        queue.push(teammateId);
       }
-
-      queue.push(edge.playerId);
     }
   }
 
   return { found: false, separationNumber: -1, path: [] };
-}
-
-function pickBestClubSeason(
-  refs: { club: string; season: string }[]
-): { club: string; season: string } {
-  return refs.sort((a, b) => b.season.localeCompare(a.season))[0];
 }
 
 function reconstructPath(
@@ -80,7 +91,9 @@ function reconstructPath(
     path.push({
       player: player.name,
       playerId: player.id,
+      playerWikidataId: player.wikidataId ?? null,
       club: entry.club,
+      clubId: entry.clubId ?? null,
       season: entry.season,
     });
     current = entry.parentId;

@@ -3,7 +3,7 @@ import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
 import type { Player } from "./types/player.js";
-import type { AdjacencyList } from "./types/graph.js";
+import type { BipartiteGraph } from "./types/graph.js";
 import { buildGraph } from "./graph/build.js";
 import { PlayerSearchService } from "./services/player-search.js";
 import { createSeparationRouter } from "./routes/separation.js";
@@ -17,7 +17,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = path.join(__dirname, "../../frontend/dist");
 app.use(express.static(frontendDist));
 
-export let graph: AdjacencyList = new Map();
+export let graph: BipartiteGraph = { playerToSeasons: new Map() };
 export let playerLookup: Map<string, Player> = new Map();
 export let searchService: PlayerSearchService = new PlayerSearchService([]);
 

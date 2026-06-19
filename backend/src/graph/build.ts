@@ -1,68 +1,42 @@
 import type { Player } from "../types/player.js";
-import type { AdjacencyList, TeammateEdge, ClubSeasonRef } from "../types/graph.js";
+import type { BipartiteGraph, ClubSeasonNode } from "../types/graph.js";
 
-export function buildGraph(players: Player[]): AdjacencyList {
-  const clubSeasonIndex = new Map<string, string[]>();
+export function buildGraph(players: Player[]): BipartiteGraph {
+  // One shared node object per (club, season). Players reference these nodes,
+  // so a roster is stored exactly once no matter how many players are in it.
+  const nodeByKey = new Map<string, ClubSeasonNode>();
+  const playerToSeasons = new Map<string, ClubSeasonNode[]>();
 
   for (const player of players) {
+    // Register every player as a node, even if they never share a club-season,
+    // so isolated players are still found (and return "not found" rather than null).
+    let nodes = playerToSeasons.get(player.id);
+    if (!nodes) {
+      nodes = [];
+      playerToSeasons.set(player.id, nodes);
+    }
+
     for (const stint of player.clubs) {
       for (const season of stint.seasons) {
-        const key = `${stint.club}::${season}`;
-        let bucket = clubSeasonIndex.get(key);
-        if (!bucket) {
-          bucket = [];
-          clubSeasonIndex.set(key, bucket);
+        // Key on the club id when present (QID identity is exact); fall back to
+        // the display name for seed data that has no id.
+        const key = `${stint.clubId ?? stint.club}::${season}`;
+        let node = nodeByKey.get(key);
+        if (!node) {
+          node = { club: stint.club, clubId: stint.clubId, season, roster: [] };
+          nodeByKey.set(key, node);
         }
-        bucket.push(player.id);
+        node.roster.push(player.id);
+        nodes.push(node);
       }
     }
   }
 
-  const graph: AdjacencyList = new Map();
-  for (const player of players) {
-    graph.set(player.id, []);
+  // Sort each player's nodes by season descending so BFS discovers teammates via
+  // their most recent shared season first — that's the connection we surface.
+  for (const nodes of playerToSeasons.values()) {
+    nodes.sort((a, b) => b.season.localeCompare(a.season));
   }
 
-  for (const [key, playerIds] of clubSeasonIndex) {
-    const [club, season] = key.split("::");
-    const ref: ClubSeasonRef = { club, season };
-
-    for (let i = 0; i < playerIds.length; i++) {
-      for (let j = i + 1; j < playerIds.length; j++) {
-        addBidirectionalEdge(graph, playerIds[i], playerIds[j], ref);
-      }
-    }
-  }
-
-  return graph;
-}
-
-function addBidirectionalEdge(
-  graph: AdjacencyList,
-  a: string,
-  b: string,
-  ref: ClubSeasonRef
-): void {
-  addDirectedEdge(graph, a, b, ref);
-  addDirectedEdge(graph, b, a, ref);
-}
-
-function addDirectedEdge(
-  graph: AdjacencyList,
-  from: string,
-  to: string,
-  ref: ClubSeasonRef
-): void {
-  const edges = graph.get(from)!;
-  let edge = edges.find((e) => e.playerId === to);
-  if (!edge) {
-    edge = { playerId: to, sharedClubSeasons: [] };
-    edges.push(edge);
-  }
-  const already = edge.sharedClubSeasons.some(
-    (r) => r.club === ref.club && r.season === ref.season
-  );
-  if (!already) {
-    edge.sharedClubSeasons.push(ref);
-  }
+  return { playerToSeasons };
 }
