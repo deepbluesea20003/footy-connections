@@ -87,12 +87,17 @@ fi
 # ---- secret -----------------------------------------------------------------
 if [ "$DO_BUILD" -eq 1 ]; then
   say "Storing DATABASE_URL in Secret Manager ($SECRET)…"
+  # Use a temp file instead of stdin (--data-file=- can hang on some systems)
+  _tmpfile=$(mktemp)
+  trap "rm -f $_tmpfile" EXIT
+  printf '%s' "$DATABASE_URL" > "$_tmpfile"
   if gcloud secrets describe "$SECRET" --project "$PROJECT" >/dev/null 2>&1; then
-    printf '%s' "$DATABASE_URL" | gcloud secrets versions add "$SECRET" --project "$PROJECT" --data-file=- >/dev/null
+    gcloud secrets versions add "$SECRET" --project "$PROJECT" --data-file="$_tmpfile" >/dev/null
   else
-    printf '%s' "$DATABASE_URL" | gcloud secrets create "$SECRET" --project "$PROJECT" \
-      --replication-policy=automatic --data-file=- >/dev/null
+    gcloud secrets create "$SECRET" --project "$PROJECT" \
+      --replication-policy=automatic --data-file="$_tmpfile" >/dev/null
   fi
+  rm -f "$_tmpfile"
   # The job's runtime SA (Compute default) must read the secret.
   gcloud secrets add-iam-policy-binding "$SECRET" --project "$PROJECT" \
     --member="serviceAccount:${COMPUTE_SA}" --role=roles/secretmanager.secretAccessor \
