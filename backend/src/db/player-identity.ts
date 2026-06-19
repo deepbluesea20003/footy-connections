@@ -64,6 +64,14 @@ function identityKey(name: string, dateOfBirth?: string | null): string {
  * Caches are loaded once and kept in sync with inserts, so a batch of thousands
  * of upserts stays efficient.
  */
+export interface InMemoryResolution {
+  playerId: string;
+  /** Present when a brand-new canonical player was created (bulk-insert it). */
+  newPlayer?: { id: string; name: string; dateOfBirth: string | null; nationality: string | null };
+  /** Present when this (source, externalId) was newly mapped (bulk-insert it). */
+  newExternalId?: { source: string; externalId: string; playerId: string };
+}
+
 export function createIdentityResolver(sql: Sql) {
   const takenIds = new Set<string>();
   const byExternal = new Map<string, string>(); // `${source}::${externalId}` -> playerId
@@ -74,21 +82,40 @@ export function createIdentityResolver(sql: Sql) {
     if (loaded) return;
     loaded = true;
 
-    const players = (await sql`
-      SELECT id, name, to_char(date_of_birth, 'YYYY-MM-DD') AS date_of_birth FROM players
-    `) as { id: string; name: string; date_of_birth: string | null }[];
+    // Paginate both loads — a single SELECT over hundreds of thousands of rows
+    // is slow and can be truncated/reset by the serverless HTTP driver.
+    const PAGE = 20000;
 
-    for (const p of players) {
-      takenIds.add(p.id);
-      byIdentity.set(identityKey(p.name, p.date_of_birth), p.id);
+    let pCursor = "";
+    for (;;) {
+      const page = (await sql`
+        SELECT id, name, to_char(date_of_birth, 'YYYY-MM-DD') AS date_of_birth
+        FROM players WHERE id > ${pCursor} ORDER BY id LIMIT ${PAGE}
+      `) as { id: string; name: string; date_of_birth: string | null }[];
+      if (page.length === 0) break;
+      for (const p of page) {
+        takenIds.add(p.id);
+        byIdentity.set(identityKey(p.name, p.date_of_birth), p.id);
+      }
+      pCursor = page[page.length - 1].id;
+      if (page.length < PAGE) break;
     }
 
-    const externals = (await sql`
-      SELECT source, external_id, player_id FROM player_external_ids
-    `) as { source: string; external_id: string; player_id: string }[];
-
-    for (const e of externals) {
-      byExternal.set(`${e.source}::${e.external_id}`, e.player_id);
+    let ePid = "";
+    let eExt = "";
+    for (;;) {
+      const page = (await sql`
+        SELECT source, external_id, player_id FROM player_external_ids
+        WHERE (player_id, external_id) > (${ePid}, ${eExt})
+        ORDER BY player_id, external_id LIMIT ${PAGE}
+      `) as { source: string; external_id: string; player_id: string }[];
+      if (page.length === 0) break;
+      for (const e of page) {
+        byExternal.set(`${e.source}::${e.external_id}`, e.player_id);
+      }
+      ePid = page[page.length - 1].player_id;
+      eExt = page[page.length - 1].external_id;
+      if (page.length < PAGE) break;
     }
   }
 
@@ -161,5 +188,60 @@ export function createIdentityResolver(sql: Sql) {
     return pid;
   }
 
-  return { resolveOrCreatePlayer };
+  /** Pre-load caches so resolveInMemory() can run without per-call DB reads. */
+  async function load() {
+    await ensureLoaded();
+  }
+
+  /**
+   * Synchronous, DB-write-free resolution for bulk importing. Mirrors the
+   * resolveOrCreatePlayer dedup logic but only mutates the in-memory caches and
+   * returns the records the caller should bulk-insert. Call load() first.
+   * (Skips DOB backfill onto already-existing rows — acceptable for bulk loads,
+   * where new players carry their DOB at insert time.)
+   */
+  function resolveInMemory(input: PlayerIdentityInput): InMemoryResolution {
+    const dob = input.dateOfBirth ? String(input.dateOfBirth).slice(0, 10) : null;
+    const nationality = input.nationality ?? null;
+
+    if (input.externalId) {
+      const pid = byExternal.get(`${input.source}::${input.externalId}`);
+      if (pid) return { playerId: pid };
+    }
+
+    const idKey = identityKey(input.name, dob);
+    let pid = byIdentity.get(idKey);
+    if (!pid && dob) {
+      const nullKey = identityKey(input.name, null);
+      const nullPid = byIdentity.get(nullKey);
+      if (nullPid) {
+        pid = nullPid;
+        byIdentity.delete(nullKey);
+        byIdentity.set(idKey, pid);
+      }
+    }
+
+    const mapExternal = (playerId: string): InMemoryResolution["newExternalId"] => {
+      if (!input.externalId) return undefined;
+      const key = `${input.source}::${input.externalId}`;
+      if (byExternal.has(key)) return undefined;
+      byExternal.set(key, playerId);
+      return { source: input.source, externalId: input.externalId, playerId };
+    };
+
+    if (pid) {
+      return { playerId: pid, newExternalId: mapExternal(pid) };
+    }
+
+    pid = pickUniqueId(input.name, dob, takenIds);
+    takenIds.add(pid);
+    byIdentity.set(idKey, pid);
+    return {
+      playerId: pid,
+      newPlayer: { id: pid, name: input.name, dateOfBirth: dob, nationality },
+      newExternalId: mapExternal(pid),
+    };
+  }
+
+  return { resolveOrCreatePlayer, load, resolveInMemory };
 }

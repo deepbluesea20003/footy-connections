@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "seed": "tsx --env-file=.env src/scripts/seed-db.ts",
     "fetch": "tsx --env-file=.env src/scripts/fetch-from-api.ts",
-    "import:wikidata": "tsx --env-file=.env src/scripts/fetch-from-wikidata.ts"
+    "import:wikidata": "tsx --env-file=.env src/scripts/fetch-from-wikidata.ts",
+    "enrich:reep": "tsx --env-file=.env src/scripts/enrich-reep.ts",
+    "status": "tsx --env-file=.env src/scripts/status.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
