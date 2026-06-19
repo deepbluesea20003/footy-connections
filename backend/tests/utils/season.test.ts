@@ -55,4 +55,28 @@ describe("seasonsBetween", () => {
     const seasons = seasonsBetween("1880-01-01", "1892-01-01", { minYear: 1888, currentSeasonStartYear: 2025 });
     expect(seasons[0]).toBe("1888-89");
   });
+
+  it("treats a future end date (vandalism) as a single bounded season", () => {
+    // Real Wikidata vandalism on Q10490646: Man City start 2001, end 2078.
+    // Must NOT fill 2001→2025 and make the player a 25-season phantom hub.
+    expect(seasonsBetween("2001-01-01", "2078-01-01", OPTS)).toEqual(["2001-02"]);
+    expect(seasonsBetween("2007-01-01", "2625-01-01", OPTS)).toEqual(["2007-08"]);
+    expect(seasonsBetween("2009-01-01", "20009-01-01", OPTS)).toEqual(["2009-10"]);
+  });
+
+  it("treats an end before the start as a single bounded season", () => {
+    expect(seasonsBetween("2010-08-01", "2008-06-30", OPTS)).toEqual(["2010-11"]);
+  });
+
+  it("treats an unparseable but present end as a single bounded season", () => {
+    expect(seasonsBetween("2015-08-01", "http://garbage", OPTS)).toEqual(["2015-16"]);
+  });
+
+  it("caps an implausibly long stint to MAX_STINT_YEARS", () => {
+    // A ~40-year single-club span is itself bad data; clamp it rather than
+    // emitting 40 seasons of teammate edges.
+    const seasons = seasonsBetween("1980-08-01", "2020-06-30", OPTS);
+    expect(seasons[0]).toBe("1980-81");
+    expect(seasons[seasons.length - 1]).toBe("2010-11"); // 1980 + 30
+  });
 });

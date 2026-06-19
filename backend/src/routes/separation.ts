@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { PlayerSearchService } from "../services/player-search.js";
 import { findShortestPath } from "../graph/bfs.js";
-import type { AdjacencyList } from "../types/graph.js";
+import type { BipartiteGraph } from "../types/graph.js";
 import type { Player } from "../types/player.js";
 
 const SeparationRequest = z.object({
@@ -11,7 +11,7 @@ const SeparationRequest = z.object({
 });
 
 export function createSeparationRouter(
-  graph: AdjacencyList,
+  graph: BipartiteGraph,
   playerLookup: Map<string, Player>,
   searchService: PlayerSearchService
 ): Router {
