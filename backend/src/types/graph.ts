@@ -5,6 +5,8 @@
 // traverse through it, which is ~10x smaller in memory and trivial to build.
 export interface ClubSeasonNode {
   club: string;
+  /** Source club id (Wikidata QID or seed slug), for building UI links. */
+  clubId?: string;
   season: string;
   roster: string[]; // player ids who shared this club-season
 }
@@ -18,7 +20,11 @@ export interface BipartiteGraph {
 export interface PathStep {
   player: string;
   playerId: string;
+  /** The connecting player's Wikidata QID, if known (links to their entity). */
+  playerWikidataId?: string | null;
   club: string;
+  /** The connecting club's id (Wikidata QID or slug), if known. */
+  clubId?: string | null;
   season: string;
 }
 

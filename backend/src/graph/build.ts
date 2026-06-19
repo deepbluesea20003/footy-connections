@@ -18,10 +18,12 @@ export function buildGraph(players: Player[]): BipartiteGraph {
 
     for (const stint of player.clubs) {
       for (const season of stint.seasons) {
-        const key = `${stint.club}::${season}`;
+        // Key on the club id when present (QID identity is exact); fall back to
+        // the display name for seed data that has no id.
+        const key = `${stint.clubId ?? stint.club}::${season}`;
         let node = nodeByKey.get(key);
         if (!node) {
-          node = { club: stint.club, season, roster: [] };
+          node = { club: stint.club, clubId: stint.clubId, season, roster: [] };
           nodeByKey.set(key, node);
         }
         node.roster.push(player.id);

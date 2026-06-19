@@ -8,7 +8,9 @@ export interface PlayerSuggestion {
 export interface PathStep {
   player: string;
   playerId: string;
+  playerWikidataId?: string | null;
   club: string;
+  clubId?: string | null;
   season: string;
 }
 

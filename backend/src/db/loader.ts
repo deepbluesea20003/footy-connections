@@ -6,6 +6,7 @@ interface Row {
   name: string;
   date_of_birth: string | null;
   nationality: string | null;
+  wikidata_id: string | null;
   club_id: string;
   club_name: string;
   season: string;
@@ -31,12 +32,15 @@ async function fetchPage(
           p.name,
           to_char(p.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
           p.nationality,
+          pei.external_id AS wikidata_id,
           pcs.club_id,
           c.name AS club_name,
           pcs.season
         FROM players p
         JOIN player_club_seasons pcs ON p.id = pcs.player_id
         JOIN clubs c ON pcs.club_id = c.id
+        LEFT JOIN player_external_ids pei
+          ON pei.player_id = p.id AND pei.source = 'wikidata'
         WHERE (p.id, pcs.club_id, pcs.season) > (${cId}, ${cClub}, ${cSeason})
         ORDER BY p.id, pcs.club_id, pcs.season
         LIMIT ${PAGE}
@@ -86,6 +90,7 @@ export async function loadPlayersFromDb(): Promise<Player[]> {
           name: row.name,
           dateOfBirth: row.date_of_birth ?? undefined,
           nationality: row.nationality ?? undefined,
+          wikidataId: row.wikidata_id ?? undefined,
           clubs: [],
         };
         playerMap.set(row.id, player);
@@ -93,7 +98,7 @@ export async function loadPlayersFromDb(): Promise<Player[]> {
 
       let stint = player.clubs.find((s) => s.club === row.club_name);
       if (!stint) {
-        stint = { club: row.club_name, seasons: [] };
+        stint = { club: row.club_name, clubId: row.club_id, seasons: [] };
         player.clubs.push(stint);
       }
       if (!stint.seasons.includes(row.season)) {

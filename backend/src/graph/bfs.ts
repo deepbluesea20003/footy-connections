@@ -4,6 +4,7 @@ import type { BipartiteGraph, SeparationResult, PathStep } from "../types/graph.
 interface ParentEntry {
   parentId: string | null;
   club: string;
+  clubId?: string;
   season: string;
 }
 
@@ -24,7 +25,16 @@ export function findShortestPath(
     return {
       found: true,
       separationNumber: 0,
-      path: [{ player: player.name, playerId: player.id, club: "", season: "" }],
+      path: [
+        {
+          player: player.name,
+          playerId: player.id,
+          playerWikidataId: player.wikidataId ?? null,
+          club: "",
+          clubId: null,
+          season: "",
+        },
+      ],
     };
   }
 
@@ -50,6 +60,7 @@ export function findShortestPath(
         parent.set(teammateId, {
           parentId: current,
           club: node.club,
+          clubId: node.clubId,
           season: node.season,
         });
 
@@ -80,7 +91,9 @@ function reconstructPath(
     path.push({
       player: player.name,
       playerId: player.id,
+      playerWikidataId: player.wikidataId ?? null,
       club: entry.club,
+      clubId: entry.clubId ?? null,
       season: entry.season,
     });
     current = entry.parentId;
