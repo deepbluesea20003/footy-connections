@@ -1,0 +1,16 @@
+# Keep Cloud Build source uploads small. The importer image (backend/Dockerfile.job)
+# installs deps fresh, so none of these are needed in the build context.
+.git
+.gitignore
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+*.md
+**/.env
+*.local
+*.local.ts
+*.tsbuildinfo
+.DS_Store
+.claude/
+frontend/
