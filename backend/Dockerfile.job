@@ -1,0 +1,28 @@
+# Importer image for the resumable Wikidata batch job (GCP Cloud Run Job).
+# Separate from the web server image — no frontend, just the compiled backend.
+#
+# Build:  docker build -f backend/Dockerfile.job -t footy-importer .
+# Deploy: gcloud run jobs create footy-wikidata-import \
+#           --image footy-importer --region europe-west2 \
+#           --set-secrets DATABASE_URL=footy-db-url:latest \
+#           --max-retries 5 --task-timeout 86400s --memory 2Gi
+# Run:    gcloud run jobs execute footy-wikidata-import
+# The job is resumable: each execution continues from the Neon checkpoint, so
+# re-running after a timeout/crash picks up where it left off.
+
+FROM node:22-slim AS build
+WORKDIR /app
+COPY package.json ./
+COPY backend/package.json backend/
+RUN npm install --workspace=backend
+COPY backend/ backend/
+RUN npm run build --workspace=backend
+
+FROM node:22-slim
+WORKDIR /app
+COPY package.json ./
+COPY backend/package.json backend/
+RUN npm install --workspace=backend --omit=dev
+COPY --from=build /app/backend/dist backend/dist
+
+CMD ["node", "backend/dist/scripts/fetch-from-wikidata.js"]

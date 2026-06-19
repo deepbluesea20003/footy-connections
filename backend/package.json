@@ -9,9 +9,15 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed": "tsx --env-file=.env src/scripts/seed-db.ts",
+    "fetch": "tsx --env-file=.env src/scripts/fetch-from-api.ts",
+    "import:wikidata": "tsx --env-file=.env src/scripts/fetch-from-wikidata.ts",
+    "enrich:reep": "tsx --env-file=.env src/scripts/enrich-reep.ts",
+    "status": "tsx --env-file=.env src/scripts/status.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "zod": "^3.25.67"

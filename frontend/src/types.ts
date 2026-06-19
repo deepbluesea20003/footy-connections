@@ -1,6 +1,7 @@
 export interface PlayerSuggestion {
   id: string;
   name: string;
+  dateOfBirth?: string | null;
   clubs: string[];
 }
 

@@ -11,6 +11,15 @@ export function slugify(name: string): string {
   return normalize(name).replace(/\s+/g, "-");
 }
 
+/** Strip trailing club-type suffixes (F.C., A.F.C., S.C., C.F.) for nicer
+ *  display names. Identity is keyed on the Wikidata QID, not this string. */
+export function normalizeClubName(name: string): string {
+  return name
+    .replace(/\s+(?:f\.?\s*c\.?|a\.?\s*f\.?\s*c\.?|s\.?\s*c\.?|c\.?\s*f\.?)$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function levenshtein(a: string, b: string): number {
   const m = a.length;
   const n = b.length;

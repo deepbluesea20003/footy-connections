@@ -99,6 +99,9 @@ export function PlayerAutocomplete({ label, selected, onSelect, onClear }: Props
               onClick={() => handleSelect(player)}
             >
               <span className="font-medium text-kit-white">{player.name}</span>
+              {player.dateOfBirth && (
+                <span className="ml-2 text-xs text-kit-gray">b. {player.dateOfBirth.slice(0, 4)}</span>
+              )}
               <span className="ml-2 text-xs text-kit-dim">{player.clubs.join(", ")}</span>
             </li>
           ))}

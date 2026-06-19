@@ -41,7 +41,7 @@ export function createSeparationRouter(
       res.status(400).json({
         error: "ambiguous_player",
         details: `Multiple players match "${q1}"`,
-        suggestions: r1.players.map((p) => ({ id: p.id, name: p.name })),
+        suggestions: r1.players.map((p) => ({ id: p.id, name: p.name, dateOfBirth: p.dateOfBirth ?? null })),
       });
       return;
     }
@@ -49,7 +49,7 @@ export function createSeparationRouter(
       res.status(400).json({
         error: "ambiguous_player",
         details: `Multiple players match "${q2}"`,
-        suggestions: r2.players.map((p) => ({ id: p.id, name: p.name })),
+        suggestions: r2.players.map((p) => ({ id: p.id, name: p.name, dateOfBirth: p.dateOfBirth ?? null })),
       });
       return;
     }
