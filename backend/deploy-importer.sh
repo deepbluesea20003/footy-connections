@@ -2,6 +2,10 @@
 #
 # deploy-importer.sh — host the resumable Wikidata importer on GCP and fire it off.
 #
+# Each job run does two resumable phases: it imports squad history, then enriches
+# newly-imported players (sitelinks/photo/nationality) and refreshes search
+# popularity — so the search ranking stays current with every run.
+#
 # What it does (all server-side; no local Docker required):
 #   1. Builds backend/Dockerfile.job with Cloud Build, pushes to Artifact Registry.
 #   2. Stores DATABASE_URL (from backend/.env) in Secret Manager.

@@ -7,8 +7,8 @@
 #           --set-secrets DATABASE_URL=footy-db-url:latest \
 #           --max-retries 5 --task-timeout 86400s --memory 2Gi
 # Run:    gcloud run jobs execute footy-wikidata-import
-# The job is resumable: each execution continues from the Neon checkpoint, so
-# re-running after a timeout/crash picks up where it left off.
+# Each execution runs two resumable phases that continue from the Neon
+# checkpoint, so re-running after a timeout/crash picks up where it left off.
 
 FROM node:22-slim AS build
 WORKDIR /app
@@ -25,4 +25,9 @@ COPY backend/package.json backend/
 RUN npm install --workspace=backend --omit=dev
 COPY --from=build /app/backend/dist backend/dist
 
-CMD ["node", "backend/dist/scripts/fetch-from-wikidata.js"]
+# Two phases per run: (1) import squad history, then (2) enrich newly-imported
+# players (sitelinks/photo/nationality) and refresh search popularity. The
+# importer exits 0 even on a graceful timeout stop, so && is safe; enrichment is
+# itself resumable and only fetches players it hasn't seen, so the incremental
+# cost is small. Override knobs (WIKIDATA_DELAY_MS, ENRICH_BATCH, …) via job env.
+CMD ["sh", "-c", "node backend/dist/scripts/fetch-from-wikidata.js && node backend/dist/scripts/enrich-from-wikidata.js"]

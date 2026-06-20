@@ -123,6 +123,12 @@ resumes until the queue is drained. Watch progress with `npm run status` locally
 or job logs in the Cloud Run console. See `backend/deploy-importer.sh` header for
 all knobs (region, memory, image names) and free-tier notes.
 
+Each run does **two phases** (`Dockerfile.job` CMD): the importer, then
+`enrich:wikidata`, so newly-imported players get their search signals (sitelinks /
+photo / nationality) and `popularity` is recomputed every run. Both are resumable
+and the enrichment only fetches players it hasn't seen, so the incremental cost is
+small. Redeploy (`./backend/deploy-importer.sh`) to pick up the updated image.
+
 ## Web app deploy
 
 The API+frontend server image is the root `Dockerfile` (separate from the importer
