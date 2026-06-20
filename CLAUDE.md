@@ -35,6 +35,7 @@ npm run fetch  --workspace=backend          # recent PL squads (FOOTBALL_DATA_AP
 npm run import:wikidata --workspace=backend  # deep global history (the big one)
 npm run enrich:reep     --workspace=backend  # stamp players with reep canonical IDs
 npm run enrich:wikidata --workspace=backend  # sitelinks/photo/nationality → search ranking
+npm run enrich:crests   --workspace=backend  # club crests (football-data.org → Wikidata P154)
 ```
 
 ## The data pipeline (the important/complex part)
@@ -102,7 +103,10 @@ match tier by `popularity`, so same-name collisions resolve fame-first.
 (per-source provider IDs) · `clubs` · `player_club_seasons` (the graph edges).
 Importer bookkeeping: `import_jobs` (phase/cursor), `import_club_queue` (work queue).
 `players.reep_id` is added later by `enrich:reep`; `players.sitelinks` /
-`image_file` / `popularity` by `enrich:wikidata` (search ranking).
+`image_file` / `popularity` by `enrich:wikidata` (search ranking);
+`clubs.crest_url` by `enrich:crests` (connection-UI crests). UI detail comes from
+`GET /api/players/:id` (career timeline) and `GET /api/clubs/:id/squad?season=`
+(roster), both served in-memory from the graph + player/club maps.
 
 ## Running the importer in the cloud (free, hands-off)
 

@@ -33,7 +33,10 @@ CREATE INDEX IF NOT EXISTS idx_pei_player ON player_external_ids(player_id);
 
 CREATE TABLE IF NOT EXISTS clubs (
   id   TEXT PRIMARY KEY,
-  name TEXT NOT NULL
+  name TEXT NOT NULL,
+  -- Crest image URL, populated by enrich:crests (football-data.org for major
+  -- clubs, then Wikidata P154). NULL clubs fall back to a generated badge in UI.
+  crest_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS player_club_seasons (

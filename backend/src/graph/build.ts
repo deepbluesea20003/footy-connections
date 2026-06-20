@@ -38,5 +38,5 @@ export function buildGraph(players: Player[]): BipartiteGraph {
     nodes.sort((a, b) => b.season.localeCompare(a.season));
   }
 
-  return { playerToSeasons };
+  return { playerToSeasons, clubSeasonIndex: nodeByKey };
 }

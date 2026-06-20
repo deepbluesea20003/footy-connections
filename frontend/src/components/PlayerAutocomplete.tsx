@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { PlayerSuggestion } from "../types";
 import { usePlayerSearch } from "../hooks/usePlayerSearch";
+import { PlayerAvatar } from "./PlayerAvatar";
 
 interface Props {
   label: string;
@@ -19,36 +20,6 @@ function notabilityDots(popularity?: number | null): number {
   if (p >= 1.2) return 3;
   if (p >= 0.7) return 2;
   return 1;
-}
-
-/** Commons thumbnail with a graceful fallback to initials when the player has
- *  no photo or the image fails to load (a low-notability cue in itself). */
-function PlayerAvatar({ src, name }: { src?: string | null; name: string }) {
-  const [failed, setFailed] = useState(false);
-  const initials = name
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
-  if (src && !failed) {
-    return (
-      <img
-        src={src}
-        alt=""
-        loading="lazy"
-        onError={() => setFailed(true)}
-        className="w-9 h-9 rounded-full object-cover bg-pitch-lighter flex-shrink-0"
-      />
-    );
-  }
-  return (
-    <div className="w-9 h-9 rounded-full bg-pitch-lighter flex items-center justify-center text-xs text-kit-dim flex-shrink-0">
-      {initials}
-    </div>
-  );
 }
 
 function NotabilityMeter({ popularity }: { popularity?: number | null }) {

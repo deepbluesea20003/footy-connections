@@ -8,6 +8,8 @@ import { buildGraph } from "./graph/build.js";
 import { PlayerSearchService } from "./services/player-search.js";
 import { createSeparationRouter } from "./routes/separation.js";
 import { createPlayersRouter } from "./routes/players.js";
+import { createClubsRouter } from "./routes/clubs.js";
+import type { ClubInfo } from "./db/loader.js";
 
 export const app = express();
 app.use(cors());
@@ -17,8 +19,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = path.join(__dirname, "../../frontend/dist");
 app.use(express.static(frontendDist));
 
-export let graph: BipartiteGraph = { playerToSeasons: new Map() };
+export let graph: BipartiteGraph = { playerToSeasons: new Map(), clubSeasonIndex: new Map() };
 export let playerLookup: Map<string, Player> = new Map();
+export let clubsById: Map<string, ClubInfo> = new Map();
 export let searchService: PlayerSearchService = new PlayerSearchService([]);
 
 let initialized = false;
@@ -30,10 +33,11 @@ export async function initApp(): Promise<void> {
   let players: Player[];
 
   if (process.env.DATABASE_URL) {
-    const { loadPlayersFromDb } = await import("./db/loader.js");
+    const { loadPlayersFromDb, loadClubs } = await import("./db/loader.js");
     console.log("Loading players from Neon DB...");
     players = await loadPlayersFromDb();
-    console.log(`Loaded ${players.length} players from DB`);
+    clubsById = await loadClubs();
+    console.log(`Loaded ${players.length} players, ${clubsById.size} clubs from DB`);
   } else {
     const { players: hardcodedPlayers } = await import("./data/index.js");
     console.log("DATABASE_URL not set — using hardcoded player data");
@@ -50,8 +54,9 @@ export async function initApp(): Promise<void> {
     res.json({ status: "ok", playerCount });
   });
 
-  app.use("/api", createSeparationRouter(graph, playerLookup, searchService));
-  app.use("/api", createPlayersRouter(searchService));
+  app.use("/api", createSeparationRouter(graph, playerLookup, searchService, clubsById));
+  app.use("/api", createPlayersRouter(searchService, playerLookup, clubsById));
+  app.use("/api", createClubsRouter(graph, playerLookup, clubsById));
 
   app.get("/{*splat}", (_req, res) => {
     res.sendFile(path.join(frontendDist, "index.html"));
