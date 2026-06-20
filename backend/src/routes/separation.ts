@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { PlayerSearchService } from "../services/player-search.js";
+import type { PlayerSearchService } from "../services/player-search.js";
 import { findShortestPath } from "../graph/bfs.js";
 import type { BipartiteGraph } from "../types/graph.js";
 import type { Player } from "../types/player.js";
@@ -20,7 +20,7 @@ export function createSeparationRouter(
 ): Router {
   const router = Router();
 
-  router.post("/separation", (req, res) => {
+  router.post("/separation", async (req, res) => {
     const parsed = SeparationRequest.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
@@ -34,12 +34,11 @@ export function createSeparationRouter(
     // to fuzzy name resolution for typed-in queries / the public API.
     const resolveQuery = (q: string) => {
       const direct = playerLookup.get(q);
-      if (direct) return { type: "found" as const, player: direct };
+      if (direct) return Promise.resolve({ type: "found" as const, player: direct });
       return searchService.resolve(q);
     };
 
-    const r1 = resolveQuery(q1);
-    const r2 = resolveQuery(q2);
+    const [r1, r2] = await Promise.all([resolveQuery(q1), resolveQuery(q2)]);
 
     if (!r1) {
       res.status(404).json({ error: "player_not_found", details: `No player found matching "${q1}"` });

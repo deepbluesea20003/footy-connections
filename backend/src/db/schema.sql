@@ -49,6 +49,18 @@ CREATE TABLE IF NOT EXISTS player_club_seasons (
 CREATE INDEX IF NOT EXISTS idx_pcs_player ON player_club_seasons(player_id);
 CREATE INDEX IF NOT EXISTS idx_pcs_club_season ON player_club_seasons(club_id, season);
 
+-- Trigram search over player names (powers DbPlayerSearchService). Applied at
+-- runtime by ensureSearchIndex() in db/search-schema.ts; kept here as the
+-- canonical reference. f_unaccent is an IMMUTABLE, schema-qualified wrapper so
+-- it can back the index.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS unaccent;
+CREATE OR REPLACE FUNCTION f_unaccent(text) RETURNS text AS
+  $$ SELECT lower(public.unaccent('public.unaccent'::regdictionary, $1)) $$
+  LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE;
+CREATE INDEX IF NOT EXISTS idx_players_name_trgm
+  ON players USING gin (f_unaccent(name) gin_trgm_ops);
+
 -- Checkpointing for the resumable Wikidata importer (also self-created by the
 -- script via ensureSchema). import_jobs holds the discovery cursor + phase;
 -- import_club_queue is the per-club work queue.

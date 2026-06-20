@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { PlayerSearchService } from "../services/player-search.js";
+import type { PlayerSearchService } from "../services/player-search.js";
 import type { Player } from "../types/player.js";
 import type { ClubInfo } from "../db/loader.js";
 import { commonsThumbUrl } from "../utils/image.js";
@@ -12,14 +12,14 @@ export function createPlayersRouter(
 ): Router {
   const router = Router();
 
-  router.get("/players/search", (req, res) => {
+  router.get("/players/search", async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : "";
     if (q.length < 1) {
       res.json({ players: [] });
       return;
     }
 
-    const results = searchService.search(q, 10);
+    const results = await searchService.search(q, 10);
     res.json({
       players: results.map((p) => ({
         id: p.id,
