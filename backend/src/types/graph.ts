@@ -15,6 +15,9 @@ export interface BipartiteGraph {
   // playerId -> the club-season nodes they belong to (sorted by season desc so
   // path reconstruction surfaces the most recent shared season first).
   playerToSeasons: Map<string, ClubSeasonNode[]>;
+  // `${clubId|club}::${season}` -> the shared node, for squad lookups (the full
+  // roster of a club-season) without re-querying the DB.
+  clubSeasonIndex: Map<string, ClubSeasonNode>;
 }
 
 export interface PathStep {
@@ -22,9 +25,13 @@ export interface PathStep {
   playerId: string;
   /** The connecting player's Wikidata QID, if known (links to their entity). */
   playerWikidataId?: string | null;
+  /** The connecting player's photo thumbnail URL, if known. */
+  playerImageUrl?: string | null;
   club: string;
   /** The connecting club's id (Wikidata QID or slug), if known. */
   clubId?: string | null;
+  /** The connecting club's crest URL, if known (else the UI shows a badge). */
+  clubCrestUrl?: string | null;
   season: string;
 }
 

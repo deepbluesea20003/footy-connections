@@ -1,4 +1,4 @@
-import type { PlayerSuggestion, SeparationResult } from "../types";
+import type { PlayerSuggestion, SeparationResult, PlayerDetail, SquadResponse } from "../types";
 
 const BASE = "/api";
 
@@ -29,4 +29,16 @@ export function findSeparation(
     method: "POST",
     body: JSON.stringify({ player1, player2 }),
   });
+}
+
+export function getPlayer(id: string, signal?: AbortSignal): Promise<PlayerDetail> {
+  return request(`/players/${encodeURIComponent(id)}`, { signal });
+}
+
+export function getSquad(
+  clubId: string,
+  season: string,
+  signal?: AbortSignal
+): Promise<SquadResponse> {
+  return request(`/clubs/${encodeURIComponent(clubId)}/squad?season=${encodeURIComponent(season)}`, { signal });
 }

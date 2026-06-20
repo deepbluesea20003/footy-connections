@@ -15,6 +15,7 @@
     "import:wikidata": "tsx --env-file=.env src/scripts/fetch-from-wikidata.ts",
     "enrich:reep": "tsx --env-file=.env src/scripts/enrich-reep.ts",
     "enrich:wikidata": "tsx --env-file=.env src/scripts/enrich-from-wikidata.ts",
+    "enrich:crests": "tsx --env-file=.env src/scripts/enrich-club-crests.ts",
     "status": "tsx --env-file=.env src/scripts/status.ts"
   },
   "dependencies": {

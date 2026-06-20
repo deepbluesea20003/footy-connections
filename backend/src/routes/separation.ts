@@ -4,6 +4,8 @@ import { PlayerSearchService } from "../services/player-search.js";
 import { findShortestPath } from "../graph/bfs.js";
 import type { BipartiteGraph } from "../types/graph.js";
 import type { Player } from "../types/player.js";
+import type { ClubInfo } from "../db/loader.js";
+import { commonsThumbUrl } from "../utils/image.js";
 
 const SeparationRequest = z.object({
   player1: z.string().min(1).max(100).trim(),
@@ -13,7 +15,8 @@ const SeparationRequest = z.object({
 export function createSeparationRouter(
   graph: BipartiteGraph,
   playerLookup: Map<string, Player>,
-  searchService: PlayerSearchService
+  searchService: PlayerSearchService,
+  clubsById: Map<string, ClubInfo>
 ): Router {
   const router = Router();
 
@@ -68,6 +71,18 @@ export function createSeparationRouter(
       res.status(404).json({ error: "player_not_found", details: "Player not in graph" });
       return;
     }
+
+    // Attach photos + crests the UI needs but the graph doesn't hold, from the
+    // in-memory player/club maps (no DB round-trip).
+    result.path = result.path.map((step) => {
+      const player = playerLookup.get(step.playerId);
+      const crest = step.clubId ? clubsById.get(step.clubId)?.crestUrl : undefined;
+      return {
+        ...step,
+        playerImageUrl: player?.imageFile ? commonsThumbUrl(player.imageFile) : null,
+        clubCrestUrl: crest ?? null,
+      };
+    });
 
     res.json(result);
   });

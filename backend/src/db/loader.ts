@@ -129,3 +129,23 @@ export async function getPlayerCount(): Promise<number> {
   const rows = (await sql`SELECT COUNT(*)::text AS count FROM players`) as [{ count: string }];
   return parseInt(rows[0].count, 10);
 }
+
+export interface ClubInfo {
+  name: string;
+  crestUrl?: string;
+}
+
+/** Load all clubs (id -> name + crest) into memory at boot. ~4.5k rows fit in a
+ *  single query; used to attach crests to path steps and squad responses. */
+export async function loadClubs(): Promise<Map<string, ClubInfo>> {
+  const map = new Map<string, ClubInfo>();
+  const rows = (await sql`SELECT id, name, crest_url FROM clubs`) as {
+    id: string;
+    name: string;
+    crest_url: string | null;
+  }[];
+  for (const r of rows) {
+    map.set(r.id, { name: r.name, crestUrl: r.crest_url ?? undefined });
+  }
+  return map;
+}
