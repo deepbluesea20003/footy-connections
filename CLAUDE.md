@@ -34,6 +34,7 @@ npm run seed   --workspace=backend          # ~89 hardcoded players, bootstrap
 npm run fetch  --workspace=backend          # recent PL squads (FOOTBALL_DATA_API_KEY)
 npm run import:wikidata --workspace=backend  # deep global history (the big one)
 npm run enrich:reep     --workspace=backend  # stamp players with reep canonical IDs
+npm run enrich:wikidata --workspace=backend  # sitelinks/photo/nationality → search ranking
 ```
 
 ## The data pipeline (the important/complex part)
@@ -63,6 +64,25 @@ way it is — don't "simplify" these away:
   `CURRENT_SEASON_START_YEAR`.
 - **Reset for a clean re-import:** `TRUNCATE import_club_queue; DELETE FROM import_jobs;`
 
+### Search-ranking enrichment
+
+`enrich:wikidata` (`backend/src/scripts/enrich-from-wikidata.ts`) is a separate,
+short (~20 min) pass that makes search return the *notable* player first (the real
+Pelé, not his namesakes). Keyed on the QID already in `player_external_ids`, it
+batches SPARQL to fetch per player: `sitelinks` (Wikipedia language-edition count
+= fame proxy), `image_file` (Commons P18 photo), and `nationality` (P27). It then
+computes `players.popularity` = `log(1+sitelinks)` + a light career/recency term
+from `player_club_seasons`. `search()` ([`services/player-search.ts`]) orders every
+match tier by `popularity`, so same-name collisions resolve fame-first.
+
+- **Idempotent + resumable.** Only rows with `sitelinks IS NULL` are fetched;
+  missing entities are stamped `0` so they aren't retried. Re-run any time;
+  `--recompute` redoes only the popularity blend (after tuning weights), no
+  network. Tunables: `ENRICH_BATCH`, `ENRICH_CHUNK`, `ENRICH_LIMIT`, `WIKIDATA_DELAY_MS`.
+- **Photos are hotlinked, not stored.** We persist only the Commons filename and
+  build a sized `Special:FilePath` thumbnail URL at request time (`utils/image.ts`)
+  — zero storage/egress cost.
+
 ### Gotchas
 
 - **Wikidata is dirty.** P54 dates can be vandalized/garbage (URLs where a date
@@ -81,7 +101,8 @@ way it is — don't "simplify" these away:
 `players` (slug PK, dedup key = name+dob) · `player_external_ids`
 (per-source provider IDs) · `clubs` · `player_club_seasons` (the graph edges).
 Importer bookkeeping: `import_jobs` (phase/cursor), `import_club_queue` (work queue).
-`players.reep_id` is added later by `enrich:reep`.
+`players.reep_id` is added later by `enrich:reep`; `players.sitelinks` /
+`image_file` / `popularity` by `enrich:wikidata` (search ranking).
 
 ## Running the importer in the cloud (free, hands-off)
 
@@ -101,6 +122,12 @@ fills toward the storage budget and exits; re-running (or the daily schedule)
 resumes until the queue is drained. Watch progress with `npm run status` locally,
 or job logs in the Cloud Run console. See `backend/deploy-importer.sh` header for
 all knobs (region, memory, image names) and free-tier notes.
+
+Each run does **two phases** (`Dockerfile.job` CMD): the importer, then
+`enrich:wikidata`, so newly-imported players get their search signals (sitelinks /
+photo / nationality) and `popularity` is recomputed every run. Both are resumable
+and the enrichment only fetches players it hasn't seen, so the incremental cost is
+small. Redeploy (`./backend/deploy-importer.sh`) to pick up the updated image.
 
 ## Web app deploy
 

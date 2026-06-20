@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { PlayerSearchService } from "../../src/services/player-search.js";
 import { testPlayers } from "../helpers/fixtures.js";
+import type { Player } from "../../src/types/player.js";
 
 const service = new PlayerSearchService(testPlayers);
 
@@ -55,6 +56,30 @@ describe("PlayerSearchService", () => {
     it("returns null for no match", () => {
       const result = service.resolve("Nobody");
       expect(result).toBeNull();
+    });
+  });
+
+  describe("popularity ranking", () => {
+    const peles: Player[] = [
+      { id: "pele-1987", name: "Pelé", popularity: 1.5, clubs: [] },
+      { id: "pele-1940", name: "Pelé", popularity: 2.5, clubs: [] }, // the legend
+      { id: "pele-1991", name: "Pelé", popularity: 1.4, clubs: [] },
+    ];
+    const popService = new PlayerSearchService(peles);
+
+    it("returns every same-name player, not just one", () => {
+      const results = popService.search("Pelé");
+      expect(results).toHaveLength(3);
+    });
+
+    it("ranks the most popular same-name player first", () => {
+      const results = popService.search("Pelé");
+      expect(results[0].id).toBe("pele-1940");
+    });
+
+    it("resolve() picks the most popular exact match", () => {
+      const result = popService.resolve("Pelé");
+      expect(result).toMatchObject({ type: "found", player: { id: "pele-1940" } });
     });
   });
 });

@@ -5,10 +5,19 @@ CREATE TABLE IF NOT EXISTS players (
   id            TEXT PRIMARY KEY,
   name          TEXT NOT NULL,
   date_of_birth DATE,
-  nationality   TEXT
+  nationality   TEXT,
+  -- Search-ranking signals, populated offline by enrich:wikidata from each
+  -- player's Wikidata QID. `sitelinks` = number of Wikipedia language editions
+  -- (a global-fame proxy); `image_file` = Wikimedia Commons filename for a
+  -- thumbnail; `popularity` = precomputed blend of sitelinks + career/recency
+  -- that search() orders by, so the most notable same-name player ranks first.
+  sitelinks     INT,
+  image_file    TEXT,
+  popularity    REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_players_dob ON players(date_of_birth);
+CREATE INDEX IF NOT EXISTS idx_players_popularity ON players(popularity DESC NULLS LAST);
 
 -- Per-source provider IDs (football-data, fbref, transfermarkt, ...).
 -- Lets us re-sync each source idempotently and map any provider's ID back to

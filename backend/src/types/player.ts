@@ -14,5 +14,10 @@ export interface Player {
   nationality?: string;
   /** The player's Wikidata QID, if known (from player_external_ids). */
   wikidataId?: string;
+  /** Wikimedia Commons filename for a player photo (from Wikidata P18). */
+  imageFile?: string;
+  /** Precomputed search-ranking score (sitelinks + career/recency blend).
+   *  Higher = more notable; search() orders same-name matches by it. */
+  popularity?: number;
   clubs: ClubStint[];
 }

@@ -9,6 +9,62 @@ interface Props {
   onClear: () => void;
 }
 
+/** Bucket the continuous popularity score into a 1–5 notability rating. The
+ *  presence of a photo already signals note; this differentiates a global
+ *  legend (5) from a journeyman (1) at a glance. */
+function notabilityDots(popularity?: number | null): number {
+  const p = popularity ?? 0;
+  if (p >= 2.2) return 5;
+  if (p >= 1.7) return 4;
+  if (p >= 1.2) return 3;
+  if (p >= 0.7) return 2;
+  return 1;
+}
+
+/** Commons thumbnail with a graceful fallback to initials when the player has
+ *  no photo or the image fails to load (a low-notability cue in itself). */
+function PlayerAvatar({ src, name }: { src?: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const initials = name
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="w-9 h-9 rounded-full object-cover bg-pitch-lighter flex-shrink-0"
+      />
+    );
+  }
+  return (
+    <div className="w-9 h-9 rounded-full bg-pitch-lighter flex items-center justify-center text-xs text-kit-dim flex-shrink-0">
+      {initials}
+    </div>
+  );
+}
+
+function NotabilityMeter({ popularity }: { popularity?: number | null }) {
+  const dots = notabilityDots(popularity);
+  return (
+    <div className="flex items-center gap-0.5 flex-shrink-0" title={`Notability ${dots}/5`} aria-hidden="true">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <span
+          key={i}
+          className={`w-1.5 h-1.5 rounded-full ${i < dots ? "bg-turf" : "bg-pitch-border"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function PlayerAutocomplete({ label, selected, onSelect, onClear }: Props) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -98,11 +154,21 @@ export function PlayerAutocomplete({ label, selected, onSelect, onClear }: Props
               onMouseEnter={() => setHighlightedIndex(i)}
               onClick={() => handleSelect(player)}
             >
-              <span className="font-medium text-kit-white">{player.name}</span>
-              {player.dateOfBirth && (
-                <span className="ml-2 text-xs text-kit-gray">b. {player.dateOfBirth.slice(0, 4)}</span>
-              )}
-              <span className="ml-2 text-xs text-kit-dim">{player.clubs.join(", ")}</span>
+              <div className="flex items-center gap-3">
+                <PlayerAvatar src={player.imageUrl} name={player.name} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-medium text-kit-white truncate">{player.name}</span>
+                    {player.dateOfBirth && (
+                      <span className="text-xs text-kit-gray flex-shrink-0">b. {player.dateOfBirth.slice(0, 4)}</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-kit-dim truncate">
+                    {[player.nationality, player.clubs.join(", ")].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+                <NotabilityMeter popularity={player.popularity} />
+              </div>
             </li>
           ))}
         </ul>
