@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { PlayerSearchService } from "../services/player-search.js";
+import { commonsThumbUrl } from "../utils/image.js";
 
 export function createPlayersRouter(searchService: PlayerSearchService): Router {
   const router = Router();
@@ -17,6 +18,9 @@ export function createPlayersRouter(searchService: PlayerSearchService): Router 
         id: p.id,
         name: p.name,
         dateOfBirth: p.dateOfBirth ?? null,
+        nationality: p.nationality ?? null,
+        imageUrl: p.imageFile ? commonsThumbUrl(p.imageFile) : null,
+        popularity: p.popularity ?? null,
         clubs: [...new Set(p.clubs.map((c) => c.club))],
       })),
     });

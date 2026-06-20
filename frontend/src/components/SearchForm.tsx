@@ -14,7 +14,9 @@ export function SearchForm({ onSearch, isLoading }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (player1 && player2) {
-      onSearch(player1.name, player2.name);
+      // Pass canonical ids (not names) so the exact player picked in the
+      // autocomplete is used — same-name players resolve unambiguously.
+      onSearch(player1.id, player2.id);
     }
   }
 

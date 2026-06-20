@@ -2,6 +2,11 @@ export interface PlayerSuggestion {
   id: string;
   name: string;
   dateOfBirth?: string | null;
+  nationality?: string | null;
+  /** Wikimedia Commons thumbnail URL, or null if the player has no photo. */
+  imageUrl?: string | null;
+  /** Search-ranking score; used to bucket a notability indicator in the UI. */
+  popularity?: number | null;
   clubs: string[];
 }
 

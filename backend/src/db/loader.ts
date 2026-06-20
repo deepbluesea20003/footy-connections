@@ -7,6 +7,8 @@ interface Row {
   date_of_birth: string | null;
   nationality: string | null;
   wikidata_id: string | null;
+  image_file: string | null;
+  popularity: number | null;
   club_id: string;
   club_name: string;
   season: string;
@@ -32,6 +34,8 @@ async function fetchPage(
           p.name,
           to_char(p.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
           p.nationality,
+          p.image_file,
+          p.popularity,
           pei.external_id AS wikidata_id,
           pcs.club_id,
           c.name AS club_name,
@@ -91,6 +95,8 @@ export async function loadPlayersFromDb(): Promise<Player[]> {
           dateOfBirth: row.date_of_birth ?? undefined,
           nationality: row.nationality ?? undefined,
           wikidataId: row.wikidata_id ?? undefined,
+          imageFile: row.image_file ?? undefined,
+          popularity: row.popularity ?? undefined,
           clubs: [],
         };
         playerMap.set(row.id, player);

@@ -26,8 +26,17 @@ export function createSeparationRouter(
 
     const { player1: q1, player2: q2 } = parsed.data;
 
-    const r1 = searchService.resolve(q1);
-    const r2 = searchService.resolve(q2);
+    // The frontend sends the canonical player id chosen in the autocomplete, so
+    // a disambiguated pick (e.g. the right "Pelé") is honored exactly. Fall back
+    // to fuzzy name resolution for typed-in queries / the public API.
+    const resolveQuery = (q: string) => {
+      const direct = playerLookup.get(q);
+      if (direct) return { type: "found" as const, player: direct };
+      return searchService.resolve(q);
+    };
+
+    const r1 = resolveQuery(q1);
+    const r2 = resolveQuery(q2);
 
     if (!r1) {
       res.status(404).json({ error: "player_not_found", details: `No player found matching "${q1}"` });
