@@ -1,13 +1,27 @@
 import type { Player } from "../types/player.js";
 import { normalize, levenshtein } from "../utils/string.js";
 
+export type ResolveResult =
+  | { type: "found"; player: Player }
+  | { type: "ambiguous"; players: Player[] };
+
+export interface PlayerSearchService {
+  search(query: string, limit?: number): Promise<Player[]>;
+  resolve(query: string): Promise<ResolveResult | null>;
+}
+
 /** Most-notable-first. Players without a popularity score sort last; the
  *  stable sort keeps the original (DB) order for ties. */
 function byPopularity(a: Player, b: Player): number {
   return (b.popularity ?? 0) - (a.popularity ?? 0);
 }
 
-export class PlayerSearchService {
+/**
+ * In-memory ranked search over a fixed player list. Used for the hardcoded-data
+ * fallback (no DATABASE_URL) and in tests. The production, full-dataset path is
+ * DbPlayerSearchService, which pushes ranking (including popularity) into Postgres.
+ */
+export class InMemoryPlayerSearchService implements PlayerSearchService {
   /** normalized full name -> all players with that name, most-notable first.
    *  A Map<string, Player[]> (not Player) so colliding names — e.g. the several
    *  "Pelé"s — are all retained and the famous one can win, instead of whoever
@@ -41,7 +55,7 @@ export class PlayerSearchService {
     }
   }
 
-  search(query: string, limit = 10): Player[] {
+  async search(query: string, limit = 10): Promise<Player[]> {
     const norm = normalize(query);
     if (!norm) return [];
 
@@ -89,8 +103,8 @@ export class PlayerSearchService {
     return scored.slice(0, limit).map((s) => s.player);
   }
 
-  resolve(query: string): { type: "found"; player: Player } | { type: "ambiguous"; players: Player[] } | null {
-    const results = this.search(query);
+  async resolve(query: string): Promise<ResolveResult | null> {
+    const results = await this.search(query);
     if (results.length === 0) return null;
     if (results.length === 1) return { type: "found", player: results[0] };
 
