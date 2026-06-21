@@ -1,11 +1,17 @@
+import { lazy, Suspense, useState } from "react";
 import type { SeparationState } from "../types";
 import { ConnectionChain } from "./ConnectionChain";
+
+// Code-split: the force-graph library + canvas viz load only when opened.
+const BfsGraphPanel = lazy(() => import("./BfsGraph"));
 
 interface Props {
   state: SeparationState;
 }
 
 export function Results({ state }: Props) {
+  const [showGraph, setShowGraph] = useState(false);
+
   if (state.status === "idle") return null;
 
   if (state.status === "loading") {
@@ -43,6 +49,40 @@ export function Results({ state }: Props) {
         </div>
       </div>
       <ConnectionChain path={state.result.path} />
+
+      {state.result.path.length >= 2 && (
+        <div className="w-full max-w-4xl">
+          <button
+            onClick={() => setShowGraph((v) => !v)}
+            className="mx-auto flex items-center gap-2 px-4 py-2 rounded-lg border border-pitch-border bg-pitch-light text-sm text-kit-gray hover:text-kit-white hover:border-turf/50 transition-colors"
+            aria-expanded={showGraph}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <circle cx="5" cy="6" r="2" /><circle cx="19" cy="6" r="2" /><circle cx="12" cy="18" r="2" />
+              <path d="M7 6h10M6.5 8l4.5 8M17.5 8L13 16" strokeLinecap="round" />
+            </svg>
+            {showGraph ? "Hide the connection web" : "See who connects them"}
+          </button>
+
+          {showGraph && (
+            <div className="mt-4">
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center gap-3 py-16 text-kit-gray text-sm">
+                    <div className="w-5 h-5 border-2 border-turf border-t-transparent rounded-full animate-spin" />
+                    Loading graph…
+                  </div>
+                }
+              >
+                <BfsGraphPanel
+                  player1Id={state.result.path[0].playerId}
+                  player2Id={state.result.path[state.result.path.length - 1].playerId}
+                />
+              </Suspense>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

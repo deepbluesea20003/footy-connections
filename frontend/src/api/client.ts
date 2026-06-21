@@ -1,4 +1,4 @@
-import type { PlayerSuggestion, SeparationResult, PlayerDetail, SquadResponse } from "../types";
+import type { PlayerSuggestion, SeparationResult, PlayerDetail, SquadResponse, ExploreResult } from "../types";
 
 const BASE = "/api";
 
@@ -28,6 +28,18 @@ export function findSeparation(
   return request("/separation", {
     method: "POST",
     body: JSON.stringify({ player1, player2 }),
+  });
+}
+
+export function exploreSeparation(
+  player1: string,
+  player2: string,
+  signal?: AbortSignal
+): Promise<ExploreResult> {
+  return request("/separation/explore", {
+    method: "POST",
+    body: JSON.stringify({ player1, player2 }),
+    signal,
   });
 }
 

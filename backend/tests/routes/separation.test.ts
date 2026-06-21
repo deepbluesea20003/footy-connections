@@ -36,6 +36,32 @@ describe("POST /api/separation", () => {
   });
 });
 
+describe("POST /api/separation/explore", () => {
+  it("returns the player-centric connection graph for a connected pair", async () => {
+    const res = await request(app)
+      .post("/api/separation/explore")
+      .send({ player1: "Haaland", player2: "Kevin De Bruyne" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.found).toBe(true);
+    expect(res.body.path.length).toBeGreaterThanOrEqual(2);
+    expect(Array.isArray(res.body.connectors)).toBe(true);
+    expect(res.body.totals.visitedPlayers).toBeGreaterThan(0);
+    // One connector per path link, each carrying the shared squad (faces).
+    expect(res.body.connectors).toHaveLength(res.body.path.length - 1);
+    const c = res.body.connectors[0];
+    expect(c).toHaveProperty("crestUrl");
+    expect(Array.isArray(c.squad)).toBe(true);
+    expect(c.squad.length).toBeGreaterThan(0);
+    expect(c.squad[0]).toHaveProperty("imageUrl");
+  });
+
+  it("validates input like /separation", async () => {
+    const res = await request(app).post("/api/separation/explore").send({ player1: "Haaland" });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("GET /api/players/search", () => {
   it("returns matching players", async () => {
     const res = await request(app).get("/api/players/search?q=Sal");

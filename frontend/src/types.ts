@@ -65,6 +65,38 @@ export interface SeparationResult {
   path: PathStep[];
 }
 
+// --- Connection graph (the "explore the connection" viz) -----------------
+// Player-centric: faces are the nodes, grouped under the clubs through which
+// they connect.
+
+export interface BfsLayer {
+  depth: number;
+  clubCount: number;
+  playerCount: number;
+}
+
+/** A shared club-season linking two consecutive path players, with the squad
+ *  (the teammates "via which they connect") rendered as faces grouped under it. */
+export interface Connector {
+  key: string;
+  club: string;
+  clubId?: string | null;
+  season: string;
+  crestUrl?: string | null;
+  fromPlayerId: string;
+  toPlayerId: string;
+  squad: SquadPlayer[];
+}
+
+export interface ExploreResult {
+  found: boolean;
+  separationNumber: number;
+  path: PathStep[];
+  connectors: Connector[];
+  layers: BfsLayer[];
+  totals: { visitedPlayers: number; visitedHubs: number };
+}
+
 export type RequestStatus = "idle" | "loading" | "success" | "error";
 
 export interface SeparationState {
