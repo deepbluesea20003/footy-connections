@@ -40,3 +40,45 @@ export interface SeparationResult {
   separationNumber: number;
   path: PathStep[];
 }
+
+// --- BFS exploration visualization ---------------------------------------
+// `bfsExplore` returns the shortest path PLUS an aggregated view of everything
+// the search touched, clustered by club-season hub so the (potentially 100k+)
+// visited players collapse into a bounded, renderable set.
+
+/** One club-season the BFS traversed, summarizing the players first reached
+ *  through it. `parentKey` is the hub that led here (the aggregated BFS tree). */
+export interface HubCluster {
+  key: string;               // `${clubId|club}::${season}`, or `overflow::<depth>`
+  club: string;
+  clubId?: string | null;
+  season: string;
+  /** BFS depth (degree from the source) of the players reached via this hub. */
+  depth: number;
+  /** Number of players first reached through this hub. */
+  reachedCount: number;
+  /** The hub that brought BFS here; null at the source. Edges = parentKey → key. */
+  parentKey: string | null;
+  /** True if this hub lies on the shortest path. */
+  onPath: boolean;
+  /** Crest URL, attached by the route from clubsById. */
+  crestUrl?: string | null;
+  /** For overflow nodes: how many distinct clubs were folded in. */
+  clubCount?: number;
+}
+
+/** Per-depth rollup for the "BFS visited N players across M layers" summary. */
+export interface BfsLayer {
+  depth: number;
+  clubCount: number;
+  playerCount: number;
+}
+
+export interface ExploreResult {
+  found: boolean;
+  separationNumber: number;
+  path: PathStep[];
+  clusters: HubCluster[];
+  layers: BfsLayer[];
+  totals: { visitedPlayers: number; visitedHubs: number };
+}

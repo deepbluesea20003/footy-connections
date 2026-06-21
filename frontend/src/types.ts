@@ -65,6 +65,36 @@ export interface SeparationResult {
   path: PathStep[];
 }
 
+// --- BFS exploration graph (the "explore the search" viz) ----------------
+
+export interface HubCluster {
+  key: string;
+  club: string;
+  clubId?: string | null;
+  season: string;
+  depth: number;
+  reachedCount: number;
+  parentKey: string | null;
+  onPath: boolean;
+  crestUrl?: string | null;
+  clubCount?: number;
+}
+
+export interface BfsLayer {
+  depth: number;
+  clubCount: number;
+  playerCount: number;
+}
+
+export interface ExploreResult {
+  found: boolean;
+  separationNumber: number;
+  path: PathStep[];
+  clusters: HubCluster[];
+  layers: BfsLayer[];
+  totals: { visitedPlayers: number; visitedHubs: number };
+}
+
 export type RequestStatus = "idle" | "loading" | "success" | "error";
 
 export interface SeparationState {
