@@ -37,7 +37,7 @@ describe("POST /api/separation", () => {
 });
 
 describe("POST /api/separation/explore", () => {
-  it("returns the aggregated BFS graph for a connected pair", async () => {
+  it("returns the player-centric connection graph for a connected pair", async () => {
     const res = await request(app)
       .post("/api/separation/explore")
       .send({ player1: "Haaland", player2: "Kevin De Bruyne" });
@@ -45,13 +45,15 @@ describe("POST /api/separation/explore", () => {
     expect(res.status).toBe(200);
     expect(res.body.found).toBe(true);
     expect(res.body.path.length).toBeGreaterThanOrEqual(2);
-    expect(Array.isArray(res.body.clusters)).toBe(true);
-    expect(Array.isArray(res.body.layers)).toBe(true);
+    expect(Array.isArray(res.body.connectors)).toBe(true);
     expect(res.body.totals.visitedPlayers).toBeGreaterThan(0);
-    // Clusters carry a crestUrl slot (null when the club has no crest).
-    if (res.body.clusters.length > 0) {
-      expect(res.body.clusters[0]).toHaveProperty("crestUrl");
-    }
+    // One connector per path link, each carrying the shared squad (faces).
+    expect(res.body.connectors).toHaveLength(res.body.path.length - 1);
+    const c = res.body.connectors[0];
+    expect(c).toHaveProperty("crestUrl");
+    expect(Array.isArray(c.squad)).toBe(true);
+    expect(c.squad.length).toBeGreaterThan(0);
+    expect(c.squad[0]).toHaveProperty("imageUrl");
   });
 
   it("validates input like /separation", async () => {

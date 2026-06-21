@@ -65,20 +65,9 @@ export interface SeparationResult {
   path: PathStep[];
 }
 
-// --- BFS exploration graph (the "explore the search" viz) ----------------
-
-export interface HubCluster {
-  key: string;
-  club: string;
-  clubId?: string | null;
-  season: string;
-  depth: number;
-  reachedCount: number;
-  parentKey: string | null;
-  onPath: boolean;
-  crestUrl?: string | null;
-  clubCount?: number;
-}
+// --- Connection graph (the "explore the connection" viz) -----------------
+// Player-centric: faces are the nodes, grouped under the clubs through which
+// they connect.
 
 export interface BfsLayer {
   depth: number;
@@ -86,11 +75,24 @@ export interface BfsLayer {
   playerCount: number;
 }
 
+/** A shared club-season linking two consecutive path players, with the squad
+ *  (the teammates "via which they connect") rendered as faces grouped under it. */
+export interface Connector {
+  key: string;
+  club: string;
+  clubId?: string | null;
+  season: string;
+  crestUrl?: string | null;
+  fromPlayerId: string;
+  toPlayerId: string;
+  squad: SquadPlayer[];
+}
+
 export interface ExploreResult {
   found: boolean;
   separationNumber: number;
   path: PathStep[];
-  clusters: HubCluster[];
+  connectors: Connector[];
   layers: BfsLayer[];
   totals: { visitedPlayers: number; visitedHubs: number };
 }

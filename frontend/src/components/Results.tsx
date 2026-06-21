@@ -61,7 +61,7 @@ export function Results({ state }: Props) {
               <circle cx="5" cy="6" r="2" /><circle cx="19" cy="6" r="2" /><circle cx="12" cy="18" r="2" />
               <path d="M7 6h10M6.5 8l4.5 8M17.5 8L13 16" strokeLinecap="round" />
             </svg>
-            {showGraph ? "Hide search graph" : "Explore the search graph"}
+            {showGraph ? "Hide the connection web" : "See who connects them"}
           </button>
 
           {showGraph && (

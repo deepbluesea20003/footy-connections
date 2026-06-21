@@ -7,6 +7,10 @@ import type { BipartiteGraph, PathStep } from "../types/graph.js";
 import type { Player } from "../types/player.js";
 import type { ClubInfo } from "../db/loader.js";
 import { commonsThumbUrl } from "../utils/image.js";
+import { playerSummary } from "../services/player-view.js";
+
+// How many faces to show per connecting club (most-notable first).
+const SQUAD_CAP = 16;
 
 const SeparationRequest = z.object({
   player1: z.string().min(1).max(100).trim(),
@@ -82,19 +86,49 @@ export function createSeparationRouter(
     res.json(result);
   });
 
-  // Aggregated view of the whole BFS the search ran — for the graph viz. Kept
-  // separate from /separation so the default flow stays lightweight.
+  // Player-centric view of the connection for the graph viz: the path players
+  // (faces) linked through the squads they actually shared. Kept separate from
+  // /separation so the default flow stays lightweight.
   router.post("/separation/explore", async (req, res) => {
     const pair = await resolvePair(req.body, res);
     if (!pair) return;
 
     const result = bfsExplore(graph, pair[0].id, pair[1].id, playerLookup);
-    result.path = decoratePath(result.path);
-    result.clusters = result.clusters.map((c) => ({
-      ...c,
-      crestUrl: (c.clubId ? clubsById.get(c.clubId)?.crestUrl : undefined) ?? null,
-    }));
-    res.json(result);
+    const path = decoratePath(result.path);
+
+    // For each link in the path, the shared club-season and its squad (the
+    // teammates "via which they connect") — the faces grouped under each club.
+    const connectors = [];
+    for (let i = 1; i < path.length; i++) {
+      const step = path[i];
+      const node = graph.clubSeasonIndex.get(`${step.clubId ?? step.club}::${step.season}`);
+      if (!node) continue;
+      const squad = node.roster
+        .map((id) => playerLookup.get(id))
+        .filter((p): p is Player => !!p)
+        .map(playerSummary)
+        .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+        .slice(0, SQUAD_CAP);
+      connectors.push({
+        key: `${step.clubId ?? step.club}::${step.season}`,
+        club: step.club,
+        clubId: step.clubId ?? null,
+        season: step.season,
+        crestUrl: (step.clubId ? clubsById.get(step.clubId)?.crestUrl : undefined) ?? null,
+        fromPlayerId: path[i - 1].playerId,
+        toPlayerId: step.playerId,
+        squad,
+      });
+    }
+
+    res.json({
+      found: result.found,
+      separationNumber: result.separationNumber,
+      path,
+      connectors,
+      totals: result.totals,
+      layers: result.layers,
+    });
   });
 
   return router;
