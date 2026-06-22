@@ -1,7 +1,6 @@
 export interface ClubStint {
   club: string;
-  /** Source club id — a Wikidata QID (e.g. "Q50602") for imported clubs, or a
-   *  slug for seed clubs. Used to build Wikidata links in the UI. */
+  /** Transfermarkt club id (used to derive the crest URL). */
   clubId?: string;
   seasons: string[];
 }
@@ -9,15 +8,15 @@ export interface ClubStint {
 export interface Player {
   id: string;
   name: string;
-  /** ISO date string, YYYY-MM-DD. Optional: not all sources/seed rows have it. */
+  /** ISO date string, YYYY-MM-DD. Optional: not all rows have it. */
   dateOfBirth?: string;
   nationality?: string;
-  /** The player's Wikidata QID, if known (from player_external_ids). */
+  /** Wikidata QID — legacy; unused with the Transfermarkt source (always undefined). */
   wikidataId?: string;
-  /** Wikimedia Commons filename for a player photo (from Wikidata P18). */
-  imageFile?: string;
-  /** Precomputed search-ranking score (sitelinks + career/recency blend).
-   *  Higher = more notable; search() orders same-name matches by it. */
+  /** Full player-photo URL (Transfermarkt portrait). */
+  imageUrl?: string;
+  /** Search-ranking score = ln(1 + highest market value). Higher = more notable. */
   popularity?: number;
+  /** Career: the distinct clubs+seasons the player actually appeared in. */
   clubs: ClubStint[];
 }

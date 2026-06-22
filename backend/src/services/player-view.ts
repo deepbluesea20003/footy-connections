@@ -1,7 +1,5 @@
 import type { Player } from "../types/player.js";
 import type { ClubInfo } from "../db/loader.js";
-import { commonsThumbUrl } from "../utils/image.js";
-import { wikidataUrl, wikipediaUrl } from "../utils/wiki.js";
 
 export interface CareerStint {
   club: string;
@@ -37,10 +35,10 @@ export function playerSummary(player: Player) {
     name: player.name,
     dateOfBirth: player.dateOfBirth ?? null,
     nationality: player.nationality ?? null,
-    imageUrl: player.imageFile ? commonsThumbUrl(player.imageFile) : null,
+    imageUrl: player.imageUrl ?? null,
     popularity: player.popularity ?? null,
-    wikipediaUrl: wikipediaUrl(player.wikidataId),
-    wikidataUrl: wikidataUrl(player.wikidataId),
+    wikipediaUrl: null,
+    wikidataUrl: null,
   };
 }
 

@@ -36,29 +36,16 @@ export async function initApp(): Promise<void> {
   let players: Player[];
 
   if (process.env.DATABASE_URL) {
-    const { loadPlayersFromDb, loadClubs, getPlayerCount } = await import("./db/loader.js");
-    const { readPlayerCache, writePlayerCache } = await import("./db/cache.js");
+    const { loadGraph, loadClubs } = await import("./db/loader.js");
 
-    // Loading the full graph dataset is ~40 paginated round-trips to Neon, so
-    // cache it locally. One cheap COUNT query tells us whether the importer has
-    // changed the data since the cache was written.
-    const count = await getPlayerCount();
-    const cached = readPlayerCache(count);
-    if (cached) {
-      players = cached;
-      clubsById = await loadClubs();
-      console.log(`Loaded ${players.length} players from local cache, ${clubsById.size} clubs from DB`);
-    } else {
-      console.log("Loading players from Neon DB...");
-      players = await loadPlayersFromDb();
-      clubsById = await loadClubs();
-      console.log(`Loaded ${players.length} players, ${clubsById.size} clubs from DB`);
-      writePlayerCache(players, count);
-      console.log("Wrote local player cache");
-    }
+    // Build the co-appearance graph in one streaming pass from game_lineups.
+    const ds = await loadGraph();
+    players = ds.players;
+    graph = ds.graph;
+    clubsById = await loadClubs();
+    console.log(`Loaded ${players.length} players, ${clubsById.size} clubs from DB`);
 
-    // Search runs in Postgres against the full dataset (trigram-ranked, ordered
-    // by popularity); the graph still needs every player in memory for BFS.
+    // Search runs in Postgres (trigram-ranked, ordered by market-value popularity).
     const { ensureSearchIndex } = await import("./db/search-schema.js");
     const { DbPlayerSearchService } = await import("./services/db-player-search.js");
     await ensureSearchIndex();
@@ -67,10 +54,10 @@ export async function initApp(): Promise<void> {
     const { players: hardcodedPlayers } = await import("./data/index.js");
     console.log("DATABASE_URL not set — using hardcoded player data");
     players = hardcodedPlayers;
+    graph = buildGraph(players);
     searchService = new InMemoryPlayerSearchService(players);
   }
 
-  graph = buildGraph(players);
   playerLookup = new Map(players.map((p) => [p.id, p]));
 
   const playerCount = players.length;

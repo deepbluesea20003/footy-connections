@@ -14,10 +14,11 @@ interface ParentEntry {
   club: string;
   clubId?: string;
   season: string;
+  gameId?: string;
 }
 
-/** Stable key for a club-season hub, matching graph.clubSeasonIndex. */
-const hubKey = (node: ClubSeasonNode): string => `${node.clubId ?? node.club}::${node.season}`;
+/** Stable key for a squad hub, matching graph.clubSeasonIndex. */
+const hubKey = (node: ClubSeasonNode): string => `${node.gameId}::${node.clubId ?? node.club}`;
 
 export function findShortestPath(
   graph: BipartiteGraph,
@@ -73,6 +74,7 @@ export function findShortestPath(
           club: node.club,
           clubId: node.clubId,
           season: node.season,
+          gameId: node.gameId,
         });
 
         if (teammateId === endId) {
@@ -103,6 +105,7 @@ function reconstructPath(
       player: player.name,
       playerId: player.id,
       playerWikidataId: player.wikidataId ?? null,
+      gameId: entry.gameId ?? null,
       club: entry.club,
       clubId: entry.clubId ?? null,
       season: entry.season,
@@ -192,7 +195,7 @@ export function bfsExplore(
         visited.add(teammateId);
         depth.set(teammateId, curDepth + 1);
         viaHub.set(teammateId, k);
-        parent.set(teammateId, { parentId: current, club: node.club, clubId: node.clubId, season: node.season });
+        parent.set(teammateId, { parentId: current, club: node.club, clubId: node.clubId, season: node.season, gameId: node.gameId });
 
         let agg = hubAgg.get(k);
         if (!agg) {
@@ -220,7 +223,7 @@ export function bfsExplore(
 
   const onPathKeys = new Set<string>();
   for (let i = 1; i < path.length; i++) {
-    onPathKeys.add(`${path[i].clubId ?? path[i].club}::${path[i].season}`);
+    onPathKeys.add(`${path[i].gameId}::${path[i].clubId ?? path[i].club}`);
   }
 
   // Per-depth rollup (depth 0 is the source itself).

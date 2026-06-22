@@ -6,7 +6,6 @@ import { findShortestPath, bfsExplore } from "../graph/bfs.js";
 import type { BipartiteGraph, PathStep } from "../types/graph.js";
 import type { Player } from "../types/player.js";
 import type { ClubInfo } from "../db/loader.js";
-import { commonsThumbUrl } from "../utils/image.js";
 import { playerSummary } from "../services/player-view.js";
 
 // How many faces to show per connecting club (most-notable first).
@@ -67,9 +66,7 @@ export function createSeparationRouter(
   const decoratePath = (path: PathStep[]): PathStep[] =>
     path.map((step) => ({
       ...step,
-      playerImageUrl: playerLookup.get(step.playerId)?.imageFile
-        ? commonsThumbUrl(playerLookup.get(step.playerId)!.imageFile!)
-        : null,
+      playerImageUrl: playerLookup.get(step.playerId)?.imageUrl ?? null,
       clubCrestUrl: (step.clubId ? clubsById.get(step.clubId)?.crestUrl : undefined) ?? null,
     }));
 
@@ -96,12 +93,12 @@ export function createSeparationRouter(
     const result = bfsExplore(graph, pair[0].id, pair[1].id, playerLookup);
     const path = decoratePath(result.path);
 
-    // For each link in the path, the shared club-season and its squad (the
-    // teammates "via which they connect") — the faces grouped under each club.
+    // For each link in the path, the actual matchday squad that links the two
+    // players — the faces grouped under the game they shared.
     const connectors = [];
     for (let i = 1; i < path.length; i++) {
       const step = path[i];
-      const node = graph.clubSeasonIndex.get(`${step.clubId ?? step.club}::${step.season}`);
+      const node = step.gameId ? graph.clubSeasonIndex.get(`${step.gameId}::${step.clubId ?? step.club}`) : undefined;
       if (!node) continue;
       const squad = node.roster
         .map((id) => playerLookup.get(id))
@@ -110,7 +107,7 @@ export function createSeparationRouter(
         .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
         .slice(0, SQUAD_CAP);
       connectors.push({
-        key: `${step.clubId ?? step.club}::${step.season}`,
+        key: `${step.gameId}::${step.clubId}`,
         club: step.club,
         clubId: step.clubId ?? null,
         season: step.season,

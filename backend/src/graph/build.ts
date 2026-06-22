@@ -20,10 +20,13 @@ export function buildGraph(players: Player[]): BipartiteGraph {
       for (const season of stint.seasons) {
         // Key on the club id when present (QID identity is exact); fall back to
         // the display name for seed data that has no id.
-        const key = `${stint.clubId ?? stint.club}::${season}`;
+        // Fallback/test path has no real games: one synthetic hub per club-season.
+        const club = stint.clubId ?? stint.club;
+        const gameId = `${club}::${season}`;
+        const key = `${gameId}::${club}`; // matches hubKey(node) used everywhere
         let node = nodeByKey.get(key);
         if (!node) {
-          node = { club: stint.club, clubId: stint.clubId, season, roster: [] };
+          node = { gameId, club: stint.club, clubId: stint.clubId, season, roster: [] };
           nodeByKey.set(key, node);
         }
         node.roster.push(player.id);

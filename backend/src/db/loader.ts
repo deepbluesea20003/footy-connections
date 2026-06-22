@@ -1,128 +1,108 @@
+import { Client } from "pg";
+import QueryStream from "pg-query-stream";
 import { sql } from "./connection.js";
-import type { Player, ClubStint } from "../types/player.js";
+import type { Player } from "../types/player.js";
+import type { BipartiteGraph, ClubSeasonNode } from "../types/graph.js";
+import { crestUrl } from "../utils/image.js";
 
-interface Row {
-  id: string;
-  name: string;
-  date_of_birth: string | null;
-  nationality: string | null;
-  wikidata_id: string | null;
-  image_file: string | null;
-  popularity: number | null;
-  club_id: string;
-  club_name: string;
-  season: string;
+/** Transfermarkt season is a start year ("2024"); render as "2024-25". */
+function seasonLabel(startYear: string | null): string {
+  const y = parseInt(String(startYear), 10);
+  return Number.isFinite(y) ? `${y}-${String((y + 1) % 100).padStart(2, "0")}` : String(startYear ?? "");
 }
 
-// Neon's serverless HTTP driver has a ~10 MB response limit per query.
-// 50K rows × ~200 bytes/row JSON ≈ 10 MB which is right on the edge and
-// causes AggregateError on cold starts. 8K rows ≈ 1.6 MB is safely under.
-const PAGE = 8000;
-
-async function fetchPage(
-  cId: string,
-  cClub: string,
-  cSeason: string
-): Promise<(Row & { club_id: string })[]> {
-  const MAX_RETRIES = 4;
-  let delay = 1000;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      return (await sql`
-        SELECT
-          p.id,
-          p.name,
-          to_char(p.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
-          p.nationality,
-          p.image_file,
-          p.popularity,
-          pei.external_id AS wikidata_id,
-          pcs.club_id,
-          c.name AS club_name,
-          pcs.season
-        FROM players p
-        JOIN player_club_seasons pcs ON p.id = pcs.player_id
-        JOIN clubs c ON pcs.club_id = c.id
-        LEFT JOIN player_external_ids pei
-          ON pei.player_id = p.id AND pei.source = 'wikidata'
-        WHERE (p.id, pcs.club_id, pcs.season) > (${cId}, ${cClub}, ${cSeason})
-        ORDER BY p.id, pcs.club_id, pcs.season
-        LIMIT ${PAGE}
-      `) as (Row & { club_id: string })[];
-    } catch (err) {
-      if (attempt === MAX_RETRIES) throw err;
-      console.warn(`⚠️  Page fetch attempt ${attempt} failed (${(err as Error).message}), retrying in ${delay}ms...`);
-      await new Promise((r) => setTimeout(r, delay));
-      delay *= 2;
+/**
+ * Loads the whole dataset and builds the co-appearance graph in one streaming
+ * pass. Each `game_lineups` row places a player in a club's matchday squad for a
+ * game; the hub is keyed `${gameId}::${clubId}`, so two players share a hub iff
+ * they were named in the same squad — every edge is a real teammate relationship.
+ *
+ * Uses a direct `pg` connection + server-side cursor (pg-query-stream) rather
+ * than the serverless HTTP driver, so the ~2.4M-row join streams in one query
+ * instead of hundreds of paginated round-trips.
+ */
+export async function loadGraph(): Promise<{ players: Player[]; graph: BipartiteGraph }> {
+  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  await client.connect();
+  try {
+    console.log("📦 Loading players…");
+    const playerMap = new Map<string, Player>();
+    const pres = await client.query(
+      `SELECT id, name, to_char(date_of_birth,'YYYY-MM-DD') AS dob, nationality, image_url, popularity FROM players`
+    );
+    for (const r of pres.rows) {
+      playerMap.set(r.id, {
+        id: r.id,
+        name: r.name,
+        dateOfBirth: r.dob ?? undefined,
+        nationality: r.nationality ?? undefined,
+        imageUrl: r.image_url ?? undefined,
+        popularity: r.popularity ?? undefined,
+        clubs: [],
+      });
     }
+    console.log(`📦 ${playerMap.size} players; streaming lineups…`);
+
+    const nodeByKey = new Map<string, ClubSeasonNode>();
+    const playerToSeasons = new Map<string, ClubSeasonNode[]>();
+    for (const id of playerMap.keys()) playerToSeasons.set(id, []);
+
+    const stream = client.query(
+      new QueryStream(
+        `SELECT gl.player_id, gl.game_id, gl.club_id, c.name AS club, g.season, to_char(g.date,'YYYY-MM-DD') AS date
+         FROM game_lineups gl
+         JOIN games g ON g.id = gl.game_id
+         JOIN clubs c ON c.id = gl.club_id`,
+        [],
+        { batchSize: 10000 }
+      )
+    );
+
+    let rows = 0;
+    for await (const row of stream as AsyncIterable<{ player_id: string; game_id: string; club_id: string; club: string; season: string; date: string | null }>) {
+      const season = seasonLabel(row.season);
+      const key = `${row.game_id}::${row.club_id}`;
+      let node = nodeByKey.get(key);
+      if (!node) {
+        node = { gameId: row.game_id, club: row.club, clubId: row.club_id, season, date: row.date ?? undefined, roster: [] };
+        nodeByKey.set(key, node);
+      }
+      node.roster.push(row.player_id);
+
+      let nodes = playerToSeasons.get(row.player_id);
+      if (!nodes) {
+        nodes = [];
+        playerToSeasons.set(row.player_id, nodes);
+      }
+      nodes.push(node);
+
+      // Career timeline: distinct club + seasons the player actually appeared in.
+      const p = playerMap.get(row.player_id);
+      if (p) {
+        let stint = p.clubs.find((s) => s.clubId === row.club_id);
+        if (!stint) {
+          stint = { club: row.club, clubId: row.club_id, seasons: [] };
+          p.clubs.push(stint);
+        }
+        if (!stint.seasons.includes(season)) stint.seasons.push(season);
+      }
+
+      if (++rows % 500000 === 0) console.log(`📄 ${rows.toLocaleString()} lineup rows…`);
+    }
+
+    // Surface the most recent shared game first when reconstructing a path.
+    for (const nodes of playerToSeasons.values()) {
+      nodes.sort((a, b) => b.season.localeCompare(a.season) || (b.date ?? "").localeCompare(a.date ?? ""));
+    }
+    for (const p of playerMap.values()) {
+      p.clubs.sort((a, b) => (b.seasons[0] ?? "").localeCompare(a.seasons[0] ?? ""));
+    }
+
+    console.log(`✨ graph built: ${playerMap.size} players, ${nodeByKey.size} squad nodes, ${rows.toLocaleString()} appearances`);
+    return { players: [...playerMap.values()], graph: { playerToSeasons, clubSeasonIndex: nodeByKey } };
+  } finally {
+    await client.end();
   }
-  throw new Error("unreachable");
-}
-
-export async function loadPlayersFromDb(): Promise<Player[]> {
-  const playerMap = new Map<string, Player>();
-
-  console.log("📦 Starting player loading...");
-
-  // Cursor-paginate on the full ORDER BY tuple so a player's rows can span page
-  // boundaries without loss — a single query over ~1.9M join rows would exceed
-  // Neon's serverless HTTP response limit. Accumulating into a Map means split
-  // players merge correctly across page boundaries.
-  let cId = "";
-  let cClub = "";
-  let cSeason = "";
-  let totalRowsProcessed = 0;
-  let pageCount = 0;
-
-  for (;;) {
-    pageCount++;
-    const rows = await fetchPage(cId, cClub, cSeason);
-    
-    if (rows.length === 0) {
-      console.log(`✅ Page ${pageCount}: No more rows. Finishing pagination.`);
-      break;
-    }
-
-    totalRowsProcessed += rows.length;
-    console.log(`📄 Page ${pageCount}: Loaded ${rows.length} rows (${totalRowsProcessed} total)`);
-
-    for (const row of rows) {
-      let player = playerMap.get(row.id);
-      if (!player) {
-        player = {
-          id: row.id,
-          name: row.name,
-          dateOfBirth: row.date_of_birth ?? undefined,
-          nationality: row.nationality ?? undefined,
-          wikidataId: row.wikidata_id ?? undefined,
-          imageFile: row.image_file ?? undefined,
-          popularity: row.popularity ?? undefined,
-          clubs: [],
-        };
-        playerMap.set(row.id, player);
-      }
-
-      let stint = player.clubs.find((s) => s.club === row.club_name);
-      if (!stint) {
-        stint = { club: row.club_name, clubId: row.club_id, seasons: [] };
-        player.clubs.push(stint);
-      }
-      if (!stint.seasons.includes(row.season)) {
-        stint.seasons.push(row.season);
-      }
-    }
-
-    const last = rows[rows.length - 1];
-    cId = last.id;
-    cClub = last.club_id;
-    cSeason = last.season;
-    if (rows.length < PAGE) break;
-  }
-
-  const players = [...playerMap.values()];
-  console.log(`✨ Loading complete: ${players.length} unique players loaded (${totalRowsProcessed} rows)`);
-  
-  return players;
 }
 
 export async function getPlayerCount(): Promise<number> {
@@ -135,17 +115,10 @@ export interface ClubInfo {
   crestUrl?: string;
 }
 
-/** Load all clubs (id -> name + crest) into memory at boot. ~4.5k rows fit in a
- *  single query; used to attach crests to path steps and squad responses. */
+/** Load all clubs (id -> name + derived crest) into memory at boot. */
 export async function loadClubs(): Promise<Map<string, ClubInfo>> {
+  const rows = (await sql`SELECT id, name FROM clubs`) as { id: string; name: string }[];
   const map = new Map<string, ClubInfo>();
-  const rows = (await sql`SELECT id, name, crest_url FROM clubs`) as {
-    id: string;
-    name: string;
-    crest_url: string | null;
-  }[];
-  for (const r of rows) {
-    map.set(r.id, { name: r.name, crestUrl: r.crest_url ?? undefined });
-  }
+  for (const r of rows) map.set(r.id, { name: r.name, crestUrl: crestUrl(r.id) });
   return map;
 }
