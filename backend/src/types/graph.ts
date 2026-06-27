@@ -3,12 +3,30 @@
 // share a ClubSeasonNode. This avoids materializing O(Σ roster²) pairwise edges
 // (~38M for the full dataset) — instead we store one node per club-season and
 // traverse through it, which is ~10x smaller in memory and trivial to build.
+// A teammate "hub": one club's matchday squad in one game. Two players sharing
+// a node co-appeared (were named in the same squad), so every edge is a real,
+// verifiable teammate relationship. (For the hardcoded/test fallback there are
+// no real games, so `gameId` is synthesized per club-season.)
 export interface ClubSeasonNode {
+  /** Transfermarkt game id (or a synthetic club-season key in the fallback). */
+  gameId: string;
   club: string;
-  /** Source club id (Wikidata QID or seed slug), for building UI links. */
+  /** Transfermarkt club id, for crest URLs. */
   clubId?: string;
   season: string;
-  roster: string[]; // player ids who shared this club-season
+  /** Match date (YYYY-MM-DD), when known. */
+  date?: string;
+  roster: string[]; // player ids named in this club's squad for this game
+}
+
+/** One player's appearance in a club's matchday squad — the graph's edge basis. */
+export interface Appearance {
+  playerId: string;
+  gameId: string;
+  clubId: string;
+  club: string;
+  season: string;
+  date?: string;
 }
 
 export interface BipartiteGraph {
@@ -23,6 +41,8 @@ export interface BipartiteGraph {
 export interface PathStep {
   player: string;
   playerId: string;
+  /** The game whose squad links this player to the previous one (for the squad view). */
+  gameId?: string | null;
   /** The connecting player's Wikidata QID, if known (links to their entity). */
   playerWikidataId?: string | null;
   /** The connecting player's photo thumbnail URL, if known. */

@@ -85,10 +85,12 @@ describe("bfsExplore", () => {
     expect(result.clusters).toHaveLength(2);
     expect(result.clusters.every((c) => c.onPath)).toBe(true);
 
-    const byKey = new Map(result.clusters.map((c) => [c.key, c]));
-    expect(byKey.has("Club A::2023-24")).toBe(true);
-    // The depth-2 hub's edge points back to the depth-1 hub (aggregated BFS tree).
-    expect(byKey.get("Club B::2024-25")).toMatchObject({ depth: 2, parentKey: "Club A::2023-24" });
+    // Depth-1 hub is Club A 2023-24 (reaches bob); depth-2 is Club B 2024-25
+    // (reaches carol) and its edge points back to the depth-1 hub.
+    const d1 = result.clusters.find((c) => c.club === "Club A" && c.season === "2023-24");
+    const d2 = result.clusters.find((c) => c.club === "Club B" && c.season === "2024-25");
+    expect(d1).toMatchObject({ depth: 1 });
+    expect(d2).toMatchObject({ depth: 2, parentKey: d1!.key });
 
     // Layers: source (depth 0) + one player at each of depths 1 and 2.
     expect(result.layers).toEqual([

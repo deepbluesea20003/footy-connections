@@ -13,7 +13,7 @@ interface SearchRow {
   name: string;
   date_of_birth: string | null;
   nationality: string | null;
-  image_file: string | null;
+  image_url: string | null;
   popularity: number | null;
   clubs: string[] | null;
 }
@@ -63,7 +63,7 @@ export class DbPlayerSearchService implements PlayerSearchService {
 
     const text = `
       WITH cand AS (
-        SELECT p.id, p.name, p.date_of_birth, p.nationality, p.image_file,
+        SELECT p.id, p.name, p.date_of_birth, p.nationality, p.image_url,
                p.popularity, f_unaccent(p.name) AS nn
         FROM players p
         WHERE ${whereClauses.join(" AND ")}
@@ -73,12 +73,12 @@ export class DbPlayerSearchService implements PlayerSearchService {
         c.name,
         to_char(c.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
         c.nationality,
-        c.image_file,
+        c.image_url,
         c.popularity,
         (SELECT array_agg(DISTINCT cl.name)
-           FROM player_club_seasons s
-           JOIN clubs cl ON cl.id = s.club_id
-          WHERE s.player_id = c.id) AS clubs
+           FROM game_lineups gl
+           JOIN clubs cl ON cl.id = gl.club_id
+          WHERE gl.player_id = c.id) AS clubs
       FROM cand c
       ORDER BY
         (CASE
@@ -99,7 +99,7 @@ export class DbPlayerSearchService implements PlayerSearchService {
       name: r.name,
       dateOfBirth: r.date_of_birth ?? undefined,
       nationality: r.nationality ?? undefined,
-      imageFile: r.image_file ?? undefined,
+      imageUrl: r.image_url ?? undefined,
       popularity: r.popularity ?? undefined,
       clubs: (r.clubs ?? []).map((club) => ({ club, seasons: [] })),
     }));
