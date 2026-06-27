@@ -1,9 +1,7 @@
-# Cloud Build config for the Wikidata importer image.
+# Cloud Build config for the data-population job image.
 # Builds backend/Dockerfile.job with the repo root as build context (the
 # Dockerfile needs the root package.json for the npm workspace), then pushes the
-# tagged image to Artifact Registry. Invoked by backend/deploy-importer.sh:
-#   gcloud builds submit --config backend/cloudbuild.importer.yaml \
-#     --substitutions=_IMAGE=<region>-docker.pkg.dev/<project>/<repo>/footy-importer:latest .
+# tagged image to Artifact Registry. Invoked by backend/deploy-data-job.sh.
 steps:
   - name: gcr.io/cloud-builders/docker
     args: ["build", "-f", "backend/Dockerfile.job", "-t", "${_IMAGE}", "."]

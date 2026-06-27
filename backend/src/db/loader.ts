@@ -1,6 +1,7 @@
 import { Client } from "pg";
 import QueryStream from "pg-query-stream";
 import { sql } from "./connection.js";
+import { directUrl } from "./pg-url.js";
 import type { Player } from "../types/player.js";
 import type { BipartiteGraph, ClubSeasonNode } from "../types/graph.js";
 import { crestUrl } from "../utils/image.js";
@@ -22,7 +23,7 @@ function seasonLabel(startYear: string | null): string {
  * instead of hundreds of paginated round-trips.
  */
 export async function loadGraph(): Promise<{ players: Player[]; graph: BipartiteGraph }> {
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  const client = new Client({ connectionString: directUrl(process.env.DATABASE_URL!), ssl: { rejectUnauthorized: false } });
   await client.connect();
   try {
     console.log("📦 Loading players…");

@@ -21,6 +21,20 @@ import { createGunzip } from "node:zlib";
 import { Readable } from "node:stream";
 import { once } from "node:events";
 import { finished } from "node:stream/promises";
+import { loadReepMaps, canonicalId, type ReepMaps } from "../db/reep.js";
+import { directUrl } from "../db/pg-url.js";
+
+/** reep maps (canonical identity), loaded if load-reep.ts has run; else null. */
+async function tryLoadReep(client: Client): Promise<ReepMaps | null> {
+  try {
+    const maps = await loadReepMaps(client);
+    console.log(`[${ts()}] reep: ${maps.toReep.size.toLocaleString()} id mappings loaded`);
+    return maps;
+  } catch {
+    console.warn(`[${ts()}] reep tables not found — using source-prefixed ids (run load:reep first to fuse sources)`);
+    return null;
+  }
+}
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -52,7 +66,7 @@ async function ensureSchema(client: Client) {
       name TEXT NOT NULL
     );
     CREATE TABLE players (
-      id            TEXT PRIMARY KEY,  -- Transfermarkt player_id
+      id            TEXT PRIMARY KEY,  -- canonical id (reep_id, else "tr:<tmId>")
       name          TEXT NOT NULL,
       date_of_birth DATE,
       nationality   TEXT,
@@ -68,7 +82,8 @@ async function ensureSchema(client: Client) {
       home_club_id    TEXT,
       away_club_id    TEXT,
       home_club_name  TEXT,
-      away_club_name  TEXT
+      away_club_name  TEXT,
+      source          TEXT             -- 'tm' | 'api_football'
     );
     -- The edge source: a player named in a club's matchday squad for a game.
     -- No PK (source may hold dupes); the graph build de-dupes.
@@ -114,29 +129,32 @@ async function copyInto(
 }
 
 async function main() {
-  const client = new Client({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  const client = new Client({ connectionString: directUrl(DATABASE_URL!), ssl: { rejectUnauthorized: false } });
   await client.connect();
   console.log(`[${ts()}] connected; comp types: ${[...COMP_TYPES].join(", ")}`);
 
   await ensureSchema(client);
   console.log(`[${ts()}] schema ready`);
 
+  const reep = await tryLoadReep(client);
+  const canon = (tmId: string) => canonicalId(reep, "transfermarkt", tmId);
+
   // 1) games — filter to in-scope competitions; collect game + club ids.
   const gameIds = new Set<string>();
   const clubIds = new Set<string>();
   const games = await copyInto(client, "games",
-    ["id", "competition_id", "season", "date", "home_club_id", "away_club_id", "home_club_name", "away_club_name"],
+    ["id", "competition_id", "season", "date", "home_club_id", "away_club_id", "home_club_name", "away_club_name", "source"],
     "games",
     (r) => {
       if (!COMP_TYPES.has(r.competition_type)) return null;
       gameIds.add(r.game_id);
       if (r.home_club_id) clubIds.add(r.home_club_id);
       if (r.away_club_id) clubIds.add(r.away_club_id);
-      return [r.game_id, r.competition_id, r.season, day(r.date), r.home_club_id, r.away_club_id, r.home_club_name, r.away_club_name];
+      return [r.game_id, r.competition_id, r.season, day(r.date), r.home_club_id, r.away_club_id, r.home_club_name, r.away_club_name, "tm"];
     });
   console.log(`[${ts()}] games: ${games.toLocaleString()} in scope (${clubIds.size} clubs)`);
 
-  // 2) game_lineups — only for in-scope games; collect player ids.
+  // 2) game_lineups — only for in-scope games; player_id -> canonical id.
   const playerIds = new Set<string>();
   const lineups = await copyInto(client, "game_lineups",
     ["game_id", "club_id", "player_id", "type"],
@@ -144,19 +162,24 @@ async function main() {
     (r) => {
       if (!gameIds.has(r.game_id)) return null;
       playerIds.add(r.player_id);
-      return [r.game_id, r.club_id, r.player_id, r.type];
+      return [r.game_id, r.club_id, canon(r.player_id), r.type];
     });
   console.log(`[${ts()}] game_lineups: ${lineups.toLocaleString()} rows (${playerIds.size} players)`);
 
-  // 3) players — only those who appear in scope.
+  // 3) players — only those in scope, keyed by canonical id (dedup: several TM
+  //    profiles can map to one reep_id).
+  const emitted = new Set<string>();
   const players = await copyInto(client, "players",
     ["id", "name", "date_of_birth", "nationality", "image_url", "market_value"],
     "players",
     (r) => {
       if (!playerIds.has(r.player_id)) return null;
+      const id = canon(r.player_id);
+      if (emitted.has(id)) return null;
+      emitted.add(id);
       const name = r.name || `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim();
       if (!name) return null;
-      return [r.player_id, name, day(r.date_of_birth) || null, r.country_of_citizenship, r.image_url, r.highest_market_value_in_eur || null];
+      return [id, name, day(r.date_of_birth) || null, r.country_of_citizenship, r.image_url, r.highest_market_value_in_eur || null];
     });
   console.log(`[${ts()}] players: ${players.toLocaleString()}`);
 
