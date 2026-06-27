@@ -1,24 +1,134 @@
 @import "tailwindcss";
 
 @theme {
-  --color-pitch: #0a0f1a;
-  --color-pitch-light: #111827;
-  --color-pitch-lighter: #1f2937;
-  --color-pitch-border: #374151;
-  --color-turf: #10b981;
-  --color-turf-light: #34d399;
-  --color-turf-dark: #059669;
-  --color-whistle: #f59e0b;
-  --color-kit-white: #f9fafb;
-  --color-kit-gray: #9ca3af;
-  --color-kit-dim: #6b7280;
-  --color-foul: #ef4444;
+  /* Stadium base — deeper, richer navy/charcoal than the old flat black. */
+  --color-pitch: #060912;
+  --color-pitch-light: #0e1422;
+  --color-pitch-lighter: #1a2336;
+  --color-pitch-card: #0f1726;
+  --color-pitch-border: #243049;
+
+  /* Primary accent — punchy electric turf, plus a cyan for the gradient pair. */
+  --color-turf: #15e081;
+  --color-turf-light: #5cf3ad;
+  --color-turf-dark: #0bb368;
+  --color-electric: #22d3ee;
+  --color-electric-dark: #0ea5c4;
+
+  /* Secondary accents. */
+  --color-whistle: #fbbf24;
+  --color-magenta: #f43f8e;
+
+  /* Foreground ramp. */
+  --color-kit-white: #f4f7fb;
+  --color-kit-gray: #9fb0c9;
+  --color-kit-dim: #647088;
+  --color-foul: #fb5a4b;
+
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  scrollbar-gutter: stable;
 }
 
 body {
-  background-color: var(--color-pitch);
   color: var(--color-kit-white);
   font-family: var(--font-sans);
   margin: 0;
+  min-height: 100vh;
+  /* Layered stadium glow: a turf-green and an electric-cyan spotlight over a
+     deep vignette — the "broadcast overlay" feel. */
+  background-color: #060912;
+  background-image:
+    radial-gradient(1200px 680px at 18% -8%, rgba(21, 224, 129, 0.16), transparent 60%),
+    radial-gradient(1100px 700px at 92% 4%, rgba(34, 211, 238, 0.14), transparent 58%),
+    radial-gradient(900px 900px at 50% 120%, rgba(244, 63, 142, 0.08), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* --- reusable look-and-feel utilities ----------------------------------- */
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* Electric green→cyan gradient text for headlines / hero numbers. */
+.text-gradient {
+  background: linear-gradient(100deg, var(--color-turf) 0%, var(--color-electric) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Glassy card surface. */
+.glass {
+  background: linear-gradient(180deg, rgba(20, 28, 46, 0.78), rgba(12, 18, 30, 0.78));
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--color-pitch-border);
+}
+
+.card-glow {
+  box-shadow: 0 0 0 1px rgba(21, 224, 129, 0.12), 0 18px 50px -24px rgba(21, 224, 129, 0.4);
+}
+
+/* Primary gradient button. */
+.btn-primary {
+  background: linear-gradient(100deg, var(--color-turf) 0%, var(--color-electric) 100%);
+  color: #04130c;
+  font-weight: 700;
+  box-shadow: 0 10px 30px -12px rgba(21, 224, 129, 0.7);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 16px 38px -12px rgba(21, 224, 129, 0.8);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* --- animations --------------------------------------------------------- */
+
+@keyframes pop-in {
+  0% { opacity: 0; transform: scale(0.85) translateY(8px); }
+  60% { transform: scale(1.04) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-pop {
+  animation: pop-in 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-5px); }
+  40%, 60% { transform: translateX(5px); }
+}
+.animate-shake {
+  animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(21, 224, 129, 0.45); }
+  50% { box-shadow: 0 0 0 8px rgba(21, 224, 129, 0); }
+}
+.animate-glow {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out both;
 }

@@ -90,7 +90,7 @@ export function PlayerAutocomplete({ label, selected, onSelect, onClear }: Props
 
   return (
     <div ref={containerRef} className="relative flex-1 min-w-0">
-      <label className="block text-sm font-medium text-kit-gray mb-1.5">{label}</label>
+      {label && <label className="block text-sm font-medium text-kit-gray mb-1.5">{label}</label>}
       <input
         type="text"
         value={query}

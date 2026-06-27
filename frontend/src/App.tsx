@@ -1,44 +1,50 @@
-import { useState } from "react";
-import type { SeparationState } from "./types";
-import { findSeparation } from "./api/client";
-import { SearchForm } from "./components/SearchForm";
-import { Results } from "./components/Results";
+import { useEffect, useState } from "react";
+import { TabBar, type TabId } from "./components/layout/TabBar";
+import { GameTab } from "./components/game/GameTab";
+import { ConnectionsTab } from "./components/ConnectionsTab";
+import { ExplorerTab } from "./components/ExplorerTab";
+
+const TABS: TabId[] = ["game", "connections", "explorer"];
+
+function tabFromHash(): TabId {
+  const id = window.location.hash.replace(/^#\/?/, "") as TabId;
+  return TABS.includes(id) ? id : "game";
+}
 
 export default function App() {
-  const [state, setState] = useState<SeparationState>({
-    status: "idle",
-    result: null,
-    error: null,
-  });
+  const [tab, setTab] = useState<TabId>(tabFromHash);
 
-  async function handleSearch(player1: string, player2: string) {
-    setState({ status: "loading", result: null, error: null });
-    try {
-      const result = await findSeparation(player1, player2);
-      setState({ status: "success", result, error: null });
-    } catch (err) {
-      setState({
-        status: "error",
-        result: null,
-        error: err instanceof Error ? err.message : "Something went wrong",
-      });
-    }
+  // Keep the URL hash and the active tab in sync (shareable deep links).
+  useEffect(() => {
+    const onHashChange = () => setTab(tabFromHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  function changeTab(id: TabId) {
+    window.location.hash = `/${id}`;
+    setTab(id);
   }
 
   return (
-    <div className="min-h-screen px-4 py-12 sm:py-20">
-      <header className="text-center mb-12">
-        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
-          <span className="text-kit-white">Football </span>
-          <span className="text-turf">Separation</span>
-          <span className="text-kit-white"> Number</span>
+    <div className="min-h-screen px-4 py-8 sm:py-12">
+      <header className="text-center mb-8">
+        <h1 className="font-display text-3xl sm:text-5xl font-black tracking-tight">
+          <span className="text-gradient">Footy</span>
+          <span className="text-kit-white"> Connections</span>
         </h1>
-        <p className="mt-3 text-kit-gray max-w-lg mx-auto">
-          Find the shortest connection between any two Premier League players through shared teammates.
-        </p>
+        <p className="mt-2 text-kit-gray text-sm">Six degrees of football, through shared teammates.</p>
       </header>
-      <SearchForm onSearch={handleSearch} isLoading={state.status === "loading"} />
-      <Results state={state} />
+
+      <div className="mb-10">
+        <TabBar active={tab} onChange={changeTab} />
+      </div>
+
+      <main className="max-w-5xl mx-auto">
+        {tab === "game" && <GameTab />}
+        {tab === "connections" && <ConnectionsTab />}
+        {tab === "explorer" && <ExplorerTab />}
+      </main>
     </div>
   );
 }

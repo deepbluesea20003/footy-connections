@@ -97,6 +97,63 @@ export interface ExploreResult {
   totals: { visitedPlayers: number; visitedHubs: number };
 }
 
+// --- Game ----------------------------------------------------------------
+
+export type Difficulty = "easy" | "medium" | "hard";
+
+export interface GameLeague {
+  id: string;
+  name: string;
+  country: string;
+}
+
+/** A puzzle endpoint (server's playerSummary). */
+export interface GamePlayer {
+  id: string;
+  name: string;
+  dateOfBirth?: string | null;
+  nationality?: string | null;
+  imageUrl?: string | null;
+  popularity?: number | null;
+}
+
+export interface Puzzle {
+  puzzleId: string;
+  difficulty: Difficulty;
+  player1: GamePlayer;
+  player2: GamePlayer;
+  par: number;
+  daily?: boolean;
+  dailyNumber?: number;
+}
+
+/** A shared club-season linking two players — the validated guess + fun fact. */
+export interface SharedLink {
+  club: string;
+  clubId: string | null;
+  crestUrl: string | null;
+  season: string;
+  date: string | null;
+  competition: string | null;
+  gamesTogether: number;
+}
+
+export interface GuessResult {
+  connected: boolean;
+  links: SharedLink[];
+}
+
+export interface HintResult {
+  found: boolean;
+  club?: string;
+  clubId?: string | null;
+  crestUrl?: string | null;
+  season?: string;
+  competition?: string | null;
+  isFinal?: boolean;
+  player?: { initial: string; nationality: string | null } | null;
+}
+
 export type RequestStatus = "idle" | "loading" | "success" | "error";
 
 export interface SeparationState {
