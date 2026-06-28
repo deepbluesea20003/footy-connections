@@ -82,10 +82,20 @@ const radius = (n: GNode) => {
   return 11 + Math.min(5, (n.popularity ?? 0) * 0.4);
 };
 
+export interface GameStateOut {
+  tipId: string;
+  tipName: string;
+  chainLength: number;
+  won: boolean;
+  steps: ChainStep[];
+  canUndo: boolean;
+  undo: () => void;
+}
+
 interface Props {
   puzzle: Puzzle;
   disabled: boolean;
-  onState: (s: { tipId: string; tipName: string; chainLength: number; won: boolean; steps: ChainStep[] }) => void;
+  onState: (s: GameStateOut) => void;
 }
 
 export function GameGraph({ puzzle, disabled, onState }: Props) {
@@ -109,15 +119,32 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
   const [career, setCareer] = useState<CareerStint[] | null>(null);
   const [loadingCareer, setLoadingCareer] = useState(false);
   const [loadingSeason, setLoadingSeason] = useState<string | null>(null);
+  const [seasonNote, setSeasonNote] = useState<string | null>(null);
 
   const tip = chain[chain.length - 1].player;
   const won = tip.id === goal.id;
   const chainIds = useMemo(() => new Set(chain.map((c) => c.player.id)), [chain]);
 
-  // Bubble state up to GameTab (scoreboard / hint / result).
+  // Step back one pick, unselecting it (and clearing any open menu/frontier).
+  const undo = useCallback(() => {
+    setChain((c) => (c.length > 1 ? c.slice(0, -1) : c));
+    setFrontier(null);
+    setMenuFor(null);
+    setCareer(null);
+  }, []);
+
+  // Bubble state up to GameTab (scoreboard / hint / result / undo control).
   useEffect(() => {
-    onState({ tipId: tip.id, tipName: tip.name, chainLength: chain.length - 1, won, steps: chain });
-  }, [chain, tip.id, tip.name, won, onState]);
+    onState({
+      tipId: tip.id,
+      tipName: tip.name,
+      chainLength: chain.length - 1,
+      won,
+      steps: chain,
+      canUndo: chain.length > 1,
+      undo,
+    });
+  }, [chain, tip.id, tip.name, won, onState, undo]);
 
   // --- responsive width ---------------------------------------------------
   useEffect(() => {
@@ -282,6 +309,7 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
     async (playerId: string) => {
       setMenuFor(playerId);
       setCareer(null);
+      setSeasonNote(null);
       const cached = careerCache.current.get(playerId);
       if (cached) {
         setCareer(cached);
@@ -315,6 +343,12 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
           const g = squad.players.find((p) => p.id === goal.id)!;
           candidates.push(g);
         }
+        // Sparse seasons (e.g. an unplayed upcoming one) have no other squad data
+        // — keep the menu open with a note rather than spawning an empty cluster.
+        if (candidates.length === 0) {
+          setSeasonNote(`No other ${squad.club.name} ${season} squad data — try another season.`);
+          return;
+        }
         setFrontier({
           sourceId: menuFor,
           hub: {
@@ -328,6 +362,7 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
         });
         setMenuFor(null);
         setCareer(null);
+        setSeasonNote(null);
       } catch {
         /* ignore — let them retry */
       } finally {
@@ -374,15 +409,25 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
     (node: GNode) => {
       if (disabled || won) return;
       if (node.kind === "club") return;
-      if (node.id === tip.id) {
-        menuFor === node.id ? (setMenuFor(null), setCareer(null)) : void openMenu(node.id);
+      const idx = chain.findIndex((c) => c.player.id === node.id);
+      if (idx !== -1) {
+        if (idx === chain.length - 1) {
+          // Tip → toggle its season menu (continue forward).
+          menuFor === node.id ? (setMenuFor(null), setCareer(null)) : void openMenu(node.id);
+        } else {
+          // An earlier pick → unselect everything after it (step back to here).
+          setChain((c) => c.slice(0, idx + 1));
+          setFrontier(null);
+          setMenuFor(null);
+          setCareer(null);
+        }
         return;
       }
       // A candidate (or the reachable goal) → commit it.
       const cand = frontier?.candidates.find((c) => c.id === node.id);
       if (cand) void commit(cand);
     },
-    [disabled, won, tip.id, menuFor, frontier, openMenu, commit]
+    [disabled, won, chain, menuFor, frontier, openMenu, commit]
   );
 
   // --- painting -----------------------------------------------------------
@@ -518,9 +563,13 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
         nodePointerAreaPaint={paintPointerArea as any}
         onNodeHover={(n: any) => {
           hoverId.current = n ? (n as GNode).id : null;
+          const node = n as GNode | null;
           const clickable =
-            n && (n as GNode).kind === "player" && ((n as GNode).id === tip.id || (n as GNode).role === "candidate" || (n as GNode).role === "goalReady");
-          if (wrapRef.current) wrapRef.current.style.cursor = clickable ? "pointer" : n ? "grab" : "grab";
+            !!node &&
+            node.kind === "player" &&
+            !won &&
+            (chainIds.has(node.id) || node.role === "candidate" || node.role === "goalReady");
+          if (wrapRef.current) wrapRef.current.style.cursor = clickable ? "pointer" : "grab";
           scheduleRepaint();
         }}
         linkColor={(l: any) => ((l as GLink).onPath ? C.turfSoft : C.faint)}
@@ -546,6 +595,7 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
           <div className="sticky top-0 px-3 py-2 text-[11px] uppercase tracking-wider text-kit-dim font-semibold border-b border-pitch-border bg-pitch-card/95">
             Pick a season for {tip.name.split(" ").slice(-1)[0]}
           </div>
+          {seasonNote && <div className="px-3 py-2 text-xs text-whistle bg-whistle/10">{seasonNote}</div>}
           {loadingCareer && <div className="px-3 py-4 text-xs text-kit-gray">Loading career…</div>}
           {!loadingCareer && career && career.length === 0 && (
             <div className="px-3 py-4 text-xs text-kit-gray">No clubs found.</div>

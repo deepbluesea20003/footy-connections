@@ -6,9 +6,12 @@ import { LEAGUES, CURATED_LEAGUE_IDS, competitionName, type League } from "../da
 
 export type Difficulty = "easy" | "medium" | "hard";
 
-// Endpoint fame floors on `popularity` (= ln(1+market value), ~0–19). Easy uses
-// only global stars; hard reaches into well-known-to-fans territory.
-const FLOORS: Record<Difficulty, number> = { easy: 17, medium: 15.5, hard: 13.5 };
+// Endpoint fame floors on `popularity` (= ln(1+market value), ~0–19). Tuned
+// against the live distribution so both endpoints are recognisable names:
+// easy ≈ household stars (Rooney/Morata tier, ~18), medium ≈ clearly famous
+// (Dalot/Matip tier, ~17.3), hard ≈ known-to-fans (~16). Below ~16 the pool is
+// mostly journeymen/squad fillers, which made puzzles feel obscure.
+const FLOORS: Record<Difficulty, number> = { easy: 18, medium: 17.3, hard: 16 };
 // How deep the season-level BFS explores when searching for the second endpoint.
 const MAX_DEPTH: Record<Difficulty, number> = { easy: 3, medium: 5, hard: 8 };
 // Preferred separation (par) per difficulty, best-match-first.
@@ -293,10 +296,14 @@ export function createGameService(deps: {
 
   function generatePuzzle(opts: { difficulty: Difficulty; leagues?: string[]; seed?: string }): PuzzleResult | null {
     const rng = rngFrom(opts.seed ? `${opts.seed}:${opts.difficulty}` : undefined);
-    const leagueIds = opts.leagues && opts.leagues.length ? opts.leagues : BIG5;
-    const leagueSet = unionLeagueSet(leagueIds);
-    // Try with the (default Big-5 or chosen) league constraint, then relax.
-    return attempt(opts.difficulty, leagueSet, rng) ?? attempt(opts.difficulty, undefined, rng);
+    const chosen = opts.leagues && opts.leagues.length ? opts.leagues : null;
+    // Endpoints are always confined to the big-5 European leagues (or the user's
+    // chosen subset of them) so both players are top-league, recognisable names.
+    const res = attempt(opts.difficulty, unionLeagueSet(chosen ?? BIG5), rng);
+    if (res) return res;
+    // Chosen leagues too thin at this fame floor → widen to the full big-5,
+    // never leaving the top-5 (we don't fall back to obscure global players).
+    return chosen ? attempt(opts.difficulty, unionLeagueSet(BIG5), rng) : null;
   }
 
   // Games two players actually shared in a specific club-season (for the fun

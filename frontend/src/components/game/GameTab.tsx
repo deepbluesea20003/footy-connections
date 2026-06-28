@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Difficulty, HintResult, Puzzle, SeparationResult } from "../../types";
 import { newGame, getHint, getGameSolution } from "../../api/client";
-import { GameGraph, type ChainStep } from "./GameGraph";
+import { GameGraph, type GameStateOut } from "./GameGraph";
 import { GameSettings } from "./GameSettings";
 import { GameResult } from "./GameResult";
 import { ConnectionChain } from "../ConnectionChain";
@@ -11,14 +11,6 @@ import { Button } from "../ui/Button";
 interface Settings {
   difficulty: Difficulty;
   leagues: string[];
-}
-
-interface GameState {
-  tipId: string;
-  tipName: string;
-  chainLength: number;
-  won: boolean;
-  steps: ChainStep[];
 }
 
 const SETTINGS_KEY = "fc.game.settings";
@@ -81,7 +73,7 @@ export function GameTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [game, setGame] = useState<GameState | null>(null);
+  const [game, setGame] = useState<GameStateOut | null>(null);
   const [hint, setHint] = useState<HintResult | null>(null);
   const [hintsUsed, setHintsUsed] = useState(0);
   const [revealed, setRevealed] = useState<SeparationResult | null>(null);
@@ -114,9 +106,9 @@ export function GameTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const onGraphState = useCallback((s: GameState) => {
+  const onGraphState = useCallback((s: GameStateOut) => {
     setGame(s);
-    setHint(null);
+    setHint(null); // a move/undo invalidates the previous hint
   }, []);
 
   async function handleHint() {
@@ -206,6 +198,9 @@ export function GameTab() {
 
           {!gameOver && (
             <div className="mx-auto max-w-md mt-5 flex justify-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => game?.undo()} disabled={!game?.canUndo}>
+                ↶ Undo
+              </Button>
               <Button variant="ghost" size="sm" onClick={handleHint}>
                 💡 Hint{hintsUsed > 0 ? ` (${hintsUsed})` : ""}
               </Button>
