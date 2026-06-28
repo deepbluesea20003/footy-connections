@@ -4,7 +4,7 @@ import { sql } from "./connection.js";
 import { directUrl } from "./pg-url.js";
 import type { Player } from "../types/player.js";
 import type { BipartiteGraph, ClubSeasonNode } from "../types/graph.js";
-import { crestUrl } from "../utils/image.js";
+import { crestUrl, bigPortrait } from "../utils/image.js";
 
 /** Transfermarkt season is a start year ("2024"); render as "2024-25". */
 function seasonLabel(startYear: string | null): string {
@@ -37,7 +37,7 @@ export async function loadGraph(): Promise<{ players: Player[]; graph: Bipartite
         name: r.name,
         dateOfBirth: r.dob ?? undefined,
         nationality: r.nationality ?? undefined,
-        imageUrl: r.image_url ?? undefined,
+        imageUrl: bigPortrait(r.image_url),
         popularity: r.popularity ?? undefined,
         clubs: [],
       });

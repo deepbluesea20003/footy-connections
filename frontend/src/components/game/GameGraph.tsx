@@ -75,6 +75,26 @@ function hashColor(name: string): string {
   return `hsl(${Math.abs(h) % 360} 55% 55%)`;
 }
 
+/** Draw `img` to fill a `d×d` box centred at (cx,cy), cropping to preserve aspect
+ *  (CSS object-cover). `topBias` 0 keeps the top of the source — portraits put the
+ *  face up high, so a low bias avoids the "squished" look the old square-stretch had. */
+function drawCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  cx: number,
+  cy: number,
+  d: number,
+  topBias = 0.5
+) {
+  const iw = img.naturalWidth;
+  const ih = img.naturalHeight;
+  const s = Math.min(iw, ih);
+  const sx = (iw - s) / 2;
+  const sy = (ih - s) * topBias;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, sx, sy, s, s, cx - d / 2, cy - d / 2, d, d);
+}
+
 const radius = (n: GNode) => {
   if (n.kind === "club") return 13;
   if (n.role === "start" || n.role === "goal" || n.role === "goalReady" || n.role === "tip") return 18;
@@ -106,6 +126,10 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
   const careerCache = useRef<Map<string, CareerStint[]>>(new Map());
   const repaintPending = useRef(false);
   const hoverId = useRef<string | null>(null);
+  // Auto-fit the camera only when content meaningfully changes (initial load, a
+  // squad opening, a resize) — not on every physics settle, which felt jumpy.
+  const pendingFit = useRef(true);
+  const lastFrontierKey = useRef<string | null>(null);
   const [width, setWidth] = useState(800);
 
   const start: GamePlayer = puzzle.player1;
@@ -149,7 +173,10 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
   // --- responsive width ---------------------------------------------------
   useEffect(() => {
     if (!wrapRef.current) return;
-    const ro = new ResizeObserver((entries) => setWidth(entries[0].contentRect.width));
+    const ro = new ResizeObserver((entries) => {
+      pendingFit.current = true; // re-frame after the canvas resizes
+      setWidth(entries[0].contentRect.width);
+    });
     ro.observe(wrapRef.current);
     return () => ro.disconnect();
   }, []);
@@ -299,10 +326,17 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    fg.d3Force("charge")?.strength(-220).distanceMax(420);
-    fg.d3Force("link")?.distance(70).strength(0.6);
+    // Stronger repulsion + longer links so an opened squad fans into a readable
+    // ring instead of a clump of overlapping faces.
+    fg.d3Force("charge")?.strength(-340).distanceMax(700);
+    fg.d3Force("link")?.distance(95).strength(0.45);
+    // Re-fit the view when a new squad opens (so its members are on-screen), but
+    // not when a pick collapses the squad — keeping the camera steady there.
+    const key = frontier ? `${frontier.hub.clubId}::${frontier.hub.season}` : null;
+    if (key && key !== lastFrontierKey.current) pendingFit.current = true;
+    lastFrontierKey.current = key;
     fg.d3ReheatSimulation?.();
-  }, [graphData]);
+  }, [graphData, frontier]);
 
   // --- interactions -------------------------------------------------------
   const openMenu = useCallback(
@@ -450,7 +484,7 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
         if (ready) {
           ctx.save();
           ctx.clip();
-          ctx.drawImage(img!, x - s, y - s, s * 2, s * 2);
+          drawCover(ctx, img!, x, y, s * 2, 0.5);
           ctx.restore();
         } else {
           ctx.fillStyle = "#cbd5e1";
@@ -476,7 +510,7 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
         if (ready) {
           ctx.save();
           ctx.clip();
-          ctx.drawImage(img!, x - r, y - r, r * 2, r * 2);
+          drawCover(ctx, img!, x, y, r * 2, 0.12);
           ctx.restore();
         } else {
           ctx.fillStyle = hashColor(node.label);
@@ -505,18 +539,28 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
         ctx.setLineDash([]);
       }
 
-      // labels: endpoints/chain/hover always; candidates when zoomed.
+      // Labels: chain/endpoints/hover get full names; candidates get a surname
+      // so you can pick by name without hovering each face. Hidden only when
+      // zoomed way out (where text would be illegible anyway).
       const important = onPath || node.role === "goal" || node.role === "goalReady" || hovered;
-      if (important || scale > 1.2) {
-        const f = 11 / scale;
-        const label = node.kind === "club" && node.season ? `${node.label} ${node.season}` : node.label;
+      const isCandidate = node.role === "candidate" && node.kind === "player";
+      if (important || isCandidate || scale > 1.1) {
+        const f = (important ? 11 : 10) / scale;
+        const full = node.kind === "club" && node.season ? `${node.label} ${node.season}` : node.label;
+        const label = isCandidate && !hovered ? node.label.split(" ").slice(-1)[0] : full;
         ctx.font = `${important ? 600 : 400} ${f}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillStyle = "rgba(2,6,12,0.72)";
         const w = ctx.measureText(label).width;
         ctx.fillRect(x - w / 2 - 2 / scale, y + r + 1 / scale, w + 4 / scale, f + 2 / scale);
-        ctx.fillStyle = onPath ? "#d1fae5" : node.role === "goal" || node.role === "goalReady" ? "#cffafe" : "#e2e8f0";
+        ctx.fillStyle = onPath
+          ? "#d1fae5"
+          : node.role === "goal" || node.role === "goalReady"
+            ? "#cffafe"
+            : hovered
+              ? "#ffffff"
+              : "#cbd5e1";
         ctx.fillText(label, x, y + r + 2 / scale);
       }
     },
@@ -524,7 +568,7 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
   );
 
   const paintPointerArea = useCallback((node: GNode, color: string, ctx: CanvasRenderingContext2D) => {
-    const r = radius(node) + 2;
+    const r = radius(node) + 4; // a touch larger than the visual so faces are easy to click
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(node.x ?? 0, node.y ?? 0, r, 0, 2 * Math.PI);
@@ -575,6 +619,11 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
         linkColor={(l: any) => ((l as GLink).onPath ? C.turfSoft : C.faint)}
         linkWidth={(l: any) => ((l as GLink).onPath ? 3 : 1)}
         onNodeClick={onNodeClick as any}
+        onBackgroundClick={() => {
+          setMenuFor(null);
+          setCareer(null);
+          setSeasonNote(null);
+        }}
         onNodeDragEnd={(n: any) => {
           n.fx = n.x;
           n.fy = n.y;
@@ -583,7 +632,11 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
         warmupTicks={40}
         cooldownTicks={160}
         d3VelocityDecay={0.32}
-        onEngineStop={() => fgRef.current?.zoomToFit?.(400, 70)}
+        onEngineStop={() => {
+          if (!pendingFit.current) return;
+          pendingFit.current = false;
+          fgRef.current?.zoomToFit?.(500, 80);
+        }}
       />
 
       {/* Floating season picker, anchored under the active player node. */}

@@ -1,6 +1,7 @@
 import { sql } from "../db/connection.js";
 import type { Player } from "../types/player.js";
 import { normalize } from "../utils/string.js";
+import { bigPortrait } from "../utils/image.js";
 import type { PlayerSearchService, ResolveResult } from "./player-search.js";
 
 /** Escape regex metacharacters so a name token is matched literally. */
@@ -99,7 +100,7 @@ export class DbPlayerSearchService implements PlayerSearchService {
       name: r.name,
       dateOfBirth: r.date_of_birth ?? undefined,
       nationality: r.nationality ?? undefined,
-      imageUrl: r.image_url ?? undefined,
+      imageUrl: bigPortrait(r.image_url),
       popularity: r.popularity ?? undefined,
       clubs: (r.clubs ?? []).map((club) => ({ club, seasons: [] })),
     }));
