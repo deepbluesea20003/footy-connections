@@ -77,22 +77,26 @@ function hashColor(name: string): string {
 
 /** Draw `img` to fill a `d×d` box centred at (cx,cy), cropping to preserve aspect
  *  (CSS object-cover). `topBias` 0 keeps the top of the source — portraits put the
- *  face up high, so a low bias avoids the "squished" look the old square-stretch had. */
+ *  face up high, so a low bias avoids the "squished" look the old square-stretch had.
+ *  `zoom` < 1 shrinks the drawn face within the box (a bit of headroom) — the caller
+ *  fills the box first so the inset margin reads as a clean border, not a gap. */
 function drawCover(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   cx: number,
   cy: number,
   d: number,
-  topBias = 0.5
+  topBias = 0.5,
+  zoom = 1
 ) {
   const iw = img.naturalWidth;
   const ih = img.naturalHeight;
   const s = Math.min(iw, ih);
   const sx = (iw - s) / 2;
   const sy = (ih - s) * topBias;
+  const dd = d * zoom;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(img, sx, sy, s, s, cx - d / 2, cy - d / 2, d, d);
+  ctx.drawImage(img, sx, sy, s, s, cx - dd / 2, cy - dd / 2, dd, dd);
 }
 
 const radius = (n: GNode) => {
@@ -510,7 +514,9 @@ export function GameGraph({ puzzle, disabled, onState }: Props) {
         if (ready) {
           ctx.save();
           ctx.clip();
-          drawCover(ctx, img!, x, y, r * 2, 0.12);
+          ctx.fillStyle = C.hub; // backing so the headroom margin reads as a border
+          ctx.fillRect(x - r, y - r, r * 2, r * 2);
+          drawCover(ctx, img!, x, y, r * 2, 0.08, 0.86);
           ctx.restore();
         } else {
           ctx.fillStyle = hashColor(node.label);
