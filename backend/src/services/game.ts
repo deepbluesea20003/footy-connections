@@ -135,11 +135,13 @@ export function createGameService(deps: {
   {
     const rosterSets = new Map<string, Set<string>>();
     for (const node of graph.clubSeasonIndex.values()) {
-      if (!node.clubId) continue;
-      const key = `${node.clubId}::${node.season}`;
+      // Identity = club id when known (exact), else the display name — mirrors
+      // buildGraph so seed/test data with no club ids still forms hubs.
+      const cid = node.clubId ?? node.club;
+      const key = `${cid}::${node.season}`;
       let hub = seasonHubs.get(key);
       if (!hub) {
-        hub = { clubId: node.clubId, club: node.club, season: node.season, competition: node.competition, players: [] };
+        hub = { clubId: cid, club: node.club, season: node.season, competition: node.competition, players: [] };
         seasonHubs.set(key, hub);
         rosterSets.set(key, new Set());
       }
@@ -223,7 +225,7 @@ export function createGameService(deps: {
     const path: PathStep[] = [];
     let cur: string | null = endId;
     while (cur) {
-      const entry = parent.get(cur)!;
+      const entry: SeasonParent = parent.get(cur)!;
       const player = playerLookup.get(cur)!;
       const hub = entry.hubKey ? seasonHubs.get(entry.hubKey) : undefined;
       path.push({
@@ -303,7 +305,7 @@ export function createGameService(deps: {
     let count = 0;
     let date: string | null = null;
     for (const node of graph.playerToSeasons.get(fromId) ?? []) {
-      if (node.clubId !== clubId || node.season !== season) continue;
+      if ((node.clubId ?? node.club) !== clubId || node.season !== season) continue;
       if (!node.roster.includes(toId)) continue;
       count++;
       if (node.date && (!date || node.date < date)) date = node.date;

@@ -16,6 +16,9 @@ const NewRequest = z.object({
 const PairRequest = z.object({
   from: z.string().min(1).max(120),
   to: z.string().min(1).max(120),
+  via: z
+    .object({ clubId: z.string().max(120).optional(), season: z.string().max(20).optional() })
+    .optional(),
 });
 
 const SolutionRequest = z.object({
@@ -80,7 +83,23 @@ export function createGameRouter(
       res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
       return;
     }
-    res.json(game.linkBetween(parsed.data.from, parsed.data.to));
+    res.json(game.linkBetween(parsed.data.from, parsed.data.to, parsed.data.via));
+  });
+
+  // A whole-season squad — the pool of valid next picks in the graph game.
+  router.get("/game/squad", (req, res) => {
+    const clubId = typeof req.query.clubId === "string" ? req.query.clubId : "";
+    const season = typeof req.query.season === "string" ? req.query.season : "";
+    if (!clubId || !season) {
+      res.status(400).json({ error: "Invalid request", details: "clubId and season required" });
+      return;
+    }
+    const squad = game.seasonSquad(clubId, season);
+    if (!squad) {
+      res.status(404).json({ error: "squad_not_found" });
+      return;
+    }
+    res.json(squad);
   });
 
   router.post("/game/hint", (req, res) => {

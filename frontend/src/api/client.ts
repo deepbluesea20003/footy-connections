@@ -6,6 +6,7 @@ import type {
   ExploreResult,
   Difficulty,
   GameLeague,
+  GameSquad,
   Puzzle,
   GuessResult,
   HintResult,
@@ -80,10 +81,34 @@ export function newGame(opts: {
   return request("/game/new", { method: "POST", body: JSON.stringify(opts) });
 }
 
-export function guessLink(from: string, to: string): Promise<GuessResult> {
-  return request("/game/guess", { method: "POST", body: JSON.stringify({ from, to }) });
+export function guessLink(
+  from: string,
+  to: string,
+  via?: { clubId?: string; season?: string }
+): Promise<GuessResult> {
+  return request("/game/guess", { method: "POST", body: JSON.stringify({ from, to, via }) });
 }
 
 export function getHint(from: string, to: string): Promise<HintResult> {
   return request("/game/hint", { method: "POST", body: JSON.stringify({ from, to }) });
+}
+
+/** A club-season squad: the next-pick pool when expanding a player in the game. */
+export function getGameSquad(
+  clubId: string,
+  season: string,
+  signal?: AbortSignal
+): Promise<GameSquad> {
+  return request(
+    `/game/squad?clubId=${encodeURIComponent(clubId)}&season=${encodeURIComponent(season)}`,
+    { signal }
+  );
+}
+
+/** A shortest season-level solution path, for "give up" reveals. */
+export function getGameSolution(player1: string, player2: string): Promise<SeparationResult> {
+  return request("/game/solution", {
+    method: "POST",
+    body: JSON.stringify({ player1, player2 }),
+  });
 }

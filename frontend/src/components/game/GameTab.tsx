@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Difficulty, HintResult, PlayerSuggestion, Puzzle, SeparationResult } from "../../types";
-import { newGame, guessLink, getHint, findSeparation } from "../../api/client";
-import { ChainBuilder, type ChainLink } from "./ChainBuilder";
+import type { Difficulty, HintResult, Puzzle, SeparationResult } from "../../types";
+import { newGame, getHint, getGameSolution } from "../../api/client";
+import { GameGraph, type ChainStep } from "./GameGraph";
 import { GameSettings } from "./GameSettings";
 import { GameResult } from "./GameResult";
 import { ConnectionChain } from "../ConnectionChain";
@@ -11,6 +11,14 @@ import { Button } from "../ui/Button";
 interface Settings {
   difficulty: Difficulty;
   leagues: string[];
+}
+
+interface GameState {
+  tipId: string;
+  tipName: string;
+  chainLength: number;
+  won: boolean;
+  steps: ChainStep[];
 }
 
 const SETTINGS_KEY = "fc.game.settings";
@@ -44,17 +52,17 @@ function HintCard({ hint, onClose }: { hint: HintResult; onClose: () => void }) 
       <div className="flex items-center gap-2">
         <ClubBadge name={hint.club ?? ""} crestUrl={hint.crestUrl} size={26} />
         <div className="text-sm text-kit-white">
-          Look for a player from{" "}
+          Open the dropdown and look for{" "}
           <span className="font-semibold">
             {hint.club} ({hint.season})
           </span>
           {hint.isFinal ? (
-            <> — that link reaches the target.</>
+            <> — that squad reaches the target.</>
           ) : (
             hint.player && (
               <>
                 {" "}
-                — try someone whose name starts with{" "}
+                — then pick someone whose name starts with{" "}
                 <span className="font-semibold">{hint.player.initial}</span>
                 {hint.player.nationality ? ` (${hint.player.nationality})` : ""}.
               </>
@@ -73,25 +81,20 @@ export function GameTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [chain, setChain] = useState<ChainLink[]>([]);
+  const [game, setGame] = useState<GameState | null>(null);
   const [hint, setHint] = useState<HintResult | null>(null);
   const [hintsUsed, setHintsUsed] = useState(0);
-  const [guessError, setGuessError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [inputKey, setInputKey] = useState(0);
   const [revealed, setRevealed] = useState<SeparationResult | null>(null);
 
-  const tip = chain.length ? chain[chain.length - 1].player : puzzle?.player1;
-  const won = !!puzzle && chain.length > 0 && chain[chain.length - 1].player.id === puzzle.player2.id;
+  const won = !!game?.won;
   const gameOver = won || revealed !== null;
 
   const start = useCallback(async (opts: { difficulty?: Difficulty; leagues?: string[]; mode?: "daily" }) => {
     setLoading(true);
     setError(null);
-    setChain([]);
+    setGame(null);
     setHint(null);
     setHintsUsed(0);
-    setGuessError(null);
     setRevealed(null);
     try {
       const p = await newGame(
@@ -111,42 +114,15 @@ export function GameTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleGuess(player: PlayerSuggestion) {
-    if (!puzzle || busy || gameOver || !tip) return;
-    if (player.id === tip.id || player.id === puzzle.player1.id || chain.some((l) => l.player.id === player.id)) {
-      setGuessError(`${player.name} is already in your chain.`);
-      setInputKey((k) => k + 1);
-      return;
-    }
-    setBusy(true);
-    setGuessError(null);
-    const tipName = tip.name;
-    try {
-      const res = await guessLink(tip.id, player.id);
-      if (res.connected) {
-        setChain((c) => [
-          ...c,
-          {
-            player: { id: player.id, name: player.name, imageUrl: player.imageUrl, nationality: player.nationality },
-            via: res.links[0],
-          },
-        ]);
-        setHint(null);
-      } else {
-        setGuessError(`${player.name} never shared a squad with ${tipName}.`);
-      }
-    } catch {
-      setGuessError("Couldn't check that link — try again.");
-    } finally {
-      setBusy(false);
-      setInputKey((k) => k + 1);
-    }
-  }
+  const onGraphState = useCallback((s: GameState) => {
+    setGame(s);
+    setHint(null);
+  }, []);
 
   async function handleHint() {
-    if (!puzzle || gameOver || !tip) return;
+    if (!puzzle || gameOver || !game) return;
     try {
-      const h = await getHint(tip.id, puzzle.player2.id);
+      const h = await getHint(game.tipId, puzzle.player2.id);
       setHint(h);
       setHintsUsed((n) => n + 1);
     } catch {
@@ -157,7 +133,7 @@ export function GameTab() {
   async function handleReveal() {
     if (!puzzle) return;
     try {
-      const sol = await findSeparation(puzzle.player1.id, puzzle.player2.id);
+      const sol = await getGameSolution(puzzle.player1.id, puzzle.player2.id);
       setRevealed(sol);
     } catch {
       /* ignore */
@@ -165,18 +141,20 @@ export function GameTab() {
   }
 
   const diffLabel = puzzle?.daily ? `Daily #${puzzle.dailyNumber}` : (puzzle?.difficulty ?? settings.difficulty);
+  const replay = () =>
+    puzzle?.daily ? start({ mode: "daily" }) : start({ difficulty: settings.difficulty, leagues: settings.leagues });
 
   return (
     <section className="animate-slide-up">
       {/* Scoreboard / controls */}
-      <div className="mx-auto max-w-md mb-6 flex items-center justify-between gap-3">
+      <div className="mx-auto max-w-3xl mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-pitch-light border border-pitch-border px-3 py-1 text-xs font-semibold uppercase tracking-wider text-turf capitalize">
             {diffLabel}
           </span>
           {puzzle && (
             <span className="text-xs text-kit-gray">
-              Links <span className="text-kit-white font-semibold">{chain.length}</span> · Par{" "}
+              Links <span className="text-kit-white font-semibold">{game?.chainLength ?? 0}</span> · Par{" "}
               <span className="text-kit-white font-semibold">{puzzle.par}</span>
             </span>
           )}
@@ -188,11 +166,19 @@ export function GameTab() {
           <Button variant="ghost" size="sm" onClick={() => start({ mode: "daily" })} title="Daily challenge">
             📅
           </Button>
-          <Button size="sm" onClick={() => start({ difficulty: settings.difficulty, leagues: settings.leagues })}>
+          <Button size="sm" onClick={replay}>
             New
           </Button>
         </div>
       </div>
+
+      {puzzle && !loading && !error && (
+        <p className="mx-auto max-w-3xl mb-3 text-center text-sm text-kit-gray">
+          Connect <span className="text-turf font-semibold">{puzzle.player1.name}</span> to{" "}
+          <span className="text-electric font-semibold">{puzzle.player2.name}</span> — click the glowing player, pick a
+          season, then choose a teammate to hop along.
+        </p>
+      )}
 
       {loading && (
         <div className="flex flex-col items-center gap-3 py-16">
@@ -204,11 +190,7 @@ export function GameTab() {
       {error && !loading && (
         <div className="max-w-md mx-auto p-6 rounded-xl bg-foul/10 border border-foul/30 text-center">
           <p className="text-foul font-medium">{error}</p>
-          <Button
-            className="mt-4"
-            variant="ghost"
-            onClick={() => start({ difficulty: settings.difficulty, leagues: settings.leagues })}
-          >
+          <Button className="mt-4" variant="ghost" onClick={replay}>
             Try again
           </Button>
         </div>
@@ -216,17 +198,9 @@ export function GameTab() {
 
       {puzzle && !loading && !error && (
         <>
-          <ChainBuilder
-            puzzle={puzzle}
-            chain={chain}
-            won={won}
-            busy={busy}
-            disabled={gameOver}
-            guessError={guessError}
-            inputKey={inputKey}
-            tipName={tip?.name ?? puzzle.player1.name}
-            onGuess={handleGuess}
-          />
+          <div className="rounded-2xl border border-pitch-border bg-pitch-light/40 overflow-hidden">
+            <GameGraph key={puzzle.puzzleId} puzzle={puzzle} disabled={gameOver} onState={onGraphState} />
+          </div>
 
           {hint && !gameOver && <HintCard hint={hint} onClose={() => setHint(null)} />}
 
@@ -241,17 +215,13 @@ export function GameTab() {
             </div>
           )}
 
-          {won && (
+          {won && game && (
             <GameResult
               puzzle={puzzle}
-              linksUsed={chain.length}
+              linksUsed={game.chainLength}
               par={puzzle.par}
               hintsUsed={hintsUsed}
-              onNewGame={() =>
-                puzzle.daily
-                  ? start({ mode: "daily" })
-                  : start({ difficulty: settings.difficulty, leagues: settings.leagues })
-              }
+              onNewGame={replay}
             />
           )}
 
@@ -262,9 +232,7 @@ export function GameTab() {
               </p>
               <ConnectionChain path={revealed.path} />
               <div className="text-center mt-4">
-                <Button onClick={() => start({ difficulty: settings.difficulty, leagues: settings.leagues })}>
-                  New game
-                </Button>
+                <Button onClick={replay}>New game</Button>
               </div>
             </div>
           )}

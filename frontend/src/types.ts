@@ -143,6 +143,14 @@ export interface GuessResult {
   links: SharedLink[];
 }
 
+/** A whole-season squad — the pool of valid next picks in the graph game. */
+export interface GameSquad {
+  club: { id: string; name: string; crestUrl: string | null };
+  season: string;
+  competition: string | null;
+  players: SquadPlayer[];
+}
+
 export interface HintResult {
   found: boolean;
   club?: string;
