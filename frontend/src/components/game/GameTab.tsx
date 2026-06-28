@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Difficulty, HintResult, Puzzle, SeparationResult } from "../../types";
 import { newGame, getHint, getGameSolution } from "../../api/client";
-import { GameGraph, type GameStateOut } from "./GameGraph";
+import { GamePane, type GameStateOut } from "./GamePane";
 import { GameSettings } from "./GameSettings";
 import { GameResult } from "./GameResult";
 import { ConnectionChain } from "../ConnectionChain";
@@ -191,7 +191,7 @@ export function GameTab() {
       {puzzle && !loading && !error && (
         <>
           <div className="rounded-2xl border border-pitch-border bg-pitch-light/40 overflow-hidden">
-            <GameGraph key={puzzle.puzzleId} puzzle={puzzle} disabled={gameOver} onState={onGraphState} />
+            <GamePane key={puzzle.puzzleId} puzzle={puzzle} disabled={gameOver} onState={onGraphState} />
           </div>
 
           {hint && !gameOver && <HintCard hint={hint} onClose={() => setHint(null)} />}
