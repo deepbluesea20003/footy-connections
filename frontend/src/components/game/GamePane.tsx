@@ -49,6 +49,36 @@ function spellYears(stint: CareerStint): string {
   return start && end ? `${start}–${end}` : start || end;
 }
 
+const startYearOf = (s: string) => parseInt((s || "").slice(0, 4), 10) || 0;
+
+// Reserve / B / youth sides (Jong Ajax, Bayern II, Real Madrid Castilla, U23s).
+// A player turns out for these *alongside* the first team, which looks like a
+// loan to the bracketing heuristic below but isn't — exclude them.
+function isReserveSide(name: string): boolean {
+  return (
+    /\b(jong|reserves?|castilla|u-?(15|16|17|18|19|20|21|22|23)|sub-?\d{2})\b/i.test(name) ||
+    /\s(ii|b)$/i.test(name.trim())
+  );
+}
+
+// We have no explicit loan flag in the data — infer it. A spell is *likely* a
+// loan when its seasons sit entirely inside a longer, concurrent spell at a
+// different club (e.g. a season at Swansea nested within a Wolves contract).
+function isLikelyLoan(stint: CareerStint, all: CareerStint[]): boolean {
+  if (isReserveSide(stint.club)) return false;
+  const cs = startYearOf(stint.firstSeason || stint.seasons[0] || "");
+  const ce = startYearOf(stint.lastSeason || stint.seasons[stint.seasons.length - 1] || "");
+  if (!cs || !ce) return false;
+  return all.some((d) => {
+    if (d.clubId === stint.clubId) return false;
+    const ds = startYearOf(d.firstSeason || d.seasons[0] || "");
+    const de = startYearOf(d.lastSeason || d.seasons[d.seasons.length - 1] || "");
+    if (!ds || !de) return false;
+    // d brackets this spell and is the longer (parent-club) tenure.
+    return ds <= cs && ce <= de && d.seasons.length > stint.seasons.length;
+  });
+}
+
 // ── Chain breadcrumb ──────────────────────────────────────────────────────────
 
 interface ChainBreadcrumbProps {
@@ -373,6 +403,7 @@ export function GamePane({ puzzle, disabled, onState }: Props) {
                   const isActive = selectedStint?.clubId === stint.clubId;
                   const isExpanded = expandedClubId === stint.clubId;
                   const multi = stint.seasons.length > 1;
+                  const loan = isLikelyLoan(stint, careerToShow);
                   return (
                     <button
                       key={stint.clubId ?? stint.club}
@@ -385,6 +416,7 @@ export function GamePane({ puzzle, disabled, onState }: Props) {
                     >
                       <ClubBadge name={stint.club} crestUrl={stint.crestUrl} size={16} />
                       <span>{stint.club}</span>
+                      {loan && <span className="text-whistle italic shrink-0">(loan)</span>}
                       <span className="text-kit-dim shrink-0">{spellYears(stint)}</span>
                       {multi && (
                         <span className="text-kit-dim shrink-0 text-[10px]">
