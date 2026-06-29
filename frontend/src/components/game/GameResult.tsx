@@ -33,8 +33,8 @@ export function GameResult({ puzzle, linksUsed, par, hintsUsed, onNewGame }: Pro
   useEffect(() => {
     const fire = (ratio: number, opts: confetti.Options) =>
       confetti({ origin: { y: 0.6 }, particleCount: Math.floor(180 * ratio), ...opts });
-    fire(0.25, { spread: 26, startVelocity: 55, colors: ["#15e081", "#22d3ee"] });
-    fire(0.35, { spread: 60, colors: ["#15e081", "#22d3ee", "#fbbf24"] });
+    fire(0.25, { spread: 26, startVelocity: 55, colors: ["#15e081", "#1565FF"] });
+    fire(0.35, { spread: 60, colors: ["#15e081", "#1565FF", "#fbbf24"] });
     fire(0.2, { spread: 100, decay: 0.91, scalar: 0.9 });
 
     // Persist a completed daily so it can't be replayed for a fresh score.
@@ -74,7 +74,7 @@ export function GameResult({ puzzle, linksUsed, par, hintsUsed, onNewGame }: Pro
           { k: "Hints", v: hintsUsed },
         ].map((s) => (
           <div key={s.k} className="rounded-xl bg-pitch-light/60 border border-pitch-border py-3">
-            <div className="font-display text-2xl font-bold text-gradient">{s.v}</div>
+            <div className="font-display text-2xl font-bold text-turf">{s.v}</div>
             <div className="text-[11px] uppercase tracking-wider text-kit-dim mt-0.5">{s.k}</div>
           </div>
         ))}

@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface Props {
   title?: ReactNode;
@@ -15,9 +16,11 @@ export function Modal({ title, onClose, children, maxWidth = "max-w-md" }: Props
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  // Portal to <body> so the fixed overlay covers the full viewport regardless of
+  // any animated ancestor that established a transform containing-block.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-slide-up"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0d1220]/50 backdrop-blur-sm animate-slide-up"
       onClick={onClose}
     >
       <div
@@ -38,6 +41,7 @@ export function Modal({ title, onClose, children, maxWidth = "max-w-md" }: Props
         )}
         <div className="p-6">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

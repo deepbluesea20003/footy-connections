@@ -23,16 +23,18 @@ export function ExplorerTab() {
         </p>
       </div>
 
-      <div className="w-full max-w-3xl mx-auto flex flex-col sm:flex-row gap-4 items-end">
-        <PlayerAutocomplete label="Player 1" selected={player1} onSelect={setPlayer1} onClear={() => setPlayer1(null)} />
-        <div className="hidden sm:flex items-center pb-3 text-kit-dim text-lg font-bold">↔</div>
-        <PlayerAutocomplete label="Player 2" selected={player2} onSelect={setPlayer2} onClear={() => setPlayer2(null)} />
-        <Button
-          disabled={!player1 || !player2}
-          onClick={() => player1 && player2 && setPair({ a: player1.id, b: player2.id })}
-        >
-          Build web
-        </Button>
+      <div className="max-w-3xl mx-auto glass card-glow rounded-2xl p-5 sm:p-7">
+        <div className="w-full flex flex-col sm:flex-row gap-4 items-end">
+          <PlayerAutocomplete label="Player 1" selected={player1} onSelect={setPlayer1} onClear={() => setPlayer1(null)} />
+          <div className="hidden sm:flex items-center pb-3 text-kit-dim text-lg font-bold">↔</div>
+          <PlayerAutocomplete label="Player 2" selected={player2} onSelect={setPlayer2} onClear={() => setPlayer2(null)} />
+          <Button
+            disabled={!player1 || !player2}
+            onClick={() => player1 && player2 && setPair({ a: player1.id, b: player2.id })}
+          >
+            Build web
+          </Button>
+        </div>
       </div>
 
       {pair && (

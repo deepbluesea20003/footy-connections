@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { TabBar, type TabId } from "./components/layout/TabBar";
+import { BackgroundShapes } from "./components/layout/BackgroundShapes";
 import { GameTab } from "./components/game/GameTab";
 import { ConnectionsTab } from "./components/ConnectionsTab";
 import { ExplorerTab } from "./components/ExplorerTab";
@@ -27,11 +28,13 @@ export default function App() {
   }
 
   return (
+    <>
+    <BackgroundShapes />
     <div className="min-h-screen px-4 py-8 sm:py-12">
       <header className="text-center mb-8">
         <h1 className="font-display text-3xl sm:text-5xl font-black tracking-tight">
-          <span className="text-gradient">Footy</span>
-          <span className="text-kit-white"> Connections</span>
+          <span className="text-turf">Footy</span>
+          <span className="text-electric"> Connections</span>
         </h1>
         <p className="mt-2 text-kit-gray text-sm">Six degrees of football, through shared teammates.</p>
       </header>
@@ -46,5 +49,6 @@ export default function App() {
         {tab === "explorer" && <ExplorerTab />}
       </main>
     </div>
+    </>
   );
 }

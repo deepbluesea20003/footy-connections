@@ -123,7 +123,7 @@ function PlayerCard({ player, isGoal, isTip, disabled, onClick }: PlayerCardProp
   const stateClass = isTip
     ? "opacity-30 cursor-not-allowed border-pitch-border bg-pitch-light/30"
     : isGoal
-    ? "border-electric/60 bg-electric/10 hover:bg-electric/20 shadow-[0_0_12px_rgba(34,211,238,0.15)]"
+    ? "border-electric/60 bg-electric/10 hover:bg-electric/20 shadow-[0_0_12px_rgba(21,101,255,0.18)]"
     : disabled
     ? "opacity-40 cursor-not-allowed border-pitch-border bg-pitch-light/20"
     : "border-pitch-border bg-pitch-light/40 hover:border-turf/40 hover:bg-turf/5";

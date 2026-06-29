@@ -190,7 +190,7 @@ export function GameTab() {
 
       {puzzle && !loading && !error && (
         <>
-          <div className="rounded-2xl border border-pitch-border bg-pitch-light/40 overflow-hidden">
+          <div className="rounded-2xl glass card-glow overflow-hidden">
             <GamePane key={puzzle.puzzleId} puzzle={puzzle} disabled={gameOver} onState={onGraphState} />
           </div>
 
