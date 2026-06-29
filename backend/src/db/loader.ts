@@ -4,7 +4,7 @@ import { sql } from "./connection.js";
 import { directUrl } from "./pg-url.js";
 import type { Player } from "../types/player.js";
 import type { BipartiteGraph, ClubSeasonNode } from "../types/graph.js";
-import { crestUrl } from "../utils/image.js";
+import { crestUrl, bigPortrait } from "../utils/image.js";
 
 /** Transfermarkt season is a start year ("2024"); render as "2024-25". */
 function seasonLabel(startYear: string | null): string {
@@ -37,7 +37,7 @@ export async function loadGraph(): Promise<{ players: Player[]; graph: Bipartite
         name: r.name,
         dateOfBirth: r.dob ?? undefined,
         nationality: r.nationality ?? undefined,
-        imageUrl: r.image_url ?? undefined,
+        imageUrl: bigPortrait(r.image_url),
         popularity: r.popularity ?? undefined,
         clubs: [],
       });
@@ -50,7 +50,7 @@ export async function loadGraph(): Promise<{ players: Player[]; graph: Bipartite
 
     const stream = client.query(
       new QueryStream(
-        `SELECT gl.player_id, gl.game_id, gl.club_id, c.name AS club, g.season, to_char(g.date,'YYYY-MM-DD') AS date
+        `SELECT gl.player_id, gl.game_id, gl.club_id, c.name AS club, g.season, to_char(g.date,'YYYY-MM-DD') AS date, g.competition_id
          FROM game_lineups gl
          JOIN games g ON g.id = gl.game_id
          JOIN clubs c ON c.id = gl.club_id`,
@@ -60,12 +60,12 @@ export async function loadGraph(): Promise<{ players: Player[]; graph: Bipartite
     );
 
     let rows = 0;
-    for await (const row of stream as AsyncIterable<{ player_id: string; game_id: string; club_id: string; club: string; season: string; date: string | null }>) {
+    for await (const row of stream as AsyncIterable<{ player_id: string; game_id: string; club_id: string; club: string; season: string; date: string | null; competition_id: string | null }>) {
       const season = seasonLabel(row.season);
       const key = `${row.game_id}::${row.club_id}`;
       let node = nodeByKey.get(key);
       if (!node) {
-        node = { gameId: row.game_id, club: row.club, clubId: row.club_id, season, date: row.date ?? undefined, roster: [] };
+        node = { gameId: row.game_id, club: row.club, clubId: row.club_id, season, date: row.date ?? undefined, competition: row.competition_id ?? undefined, roster: [] };
         nodeByKey.set(key, node);
       }
       node.roster.push(row.player_id);

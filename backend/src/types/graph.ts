@@ -16,6 +16,8 @@ export interface ClubSeasonNode {
   season: string;
   /** Match date (YYYY-MM-DD), when known. */
   date?: string;
+  /** Competition code the game belongs to (e.g. "GB1", "af:2"), when known. */
+  competition?: string;
   roster: string[]; // player ids named in this club's squad for this game
 }
 

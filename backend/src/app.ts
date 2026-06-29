@@ -12,6 +12,8 @@ import {
 import { createSeparationRouter } from "./routes/separation.js";
 import { createPlayersRouter } from "./routes/players.js";
 import { createClubsRouter } from "./routes/clubs.js";
+import { createGameRouter } from "./routes/game.js";
+import { createGameService } from "./services/game.js";
 import type { ClubInfo } from "./db/loader.js";
 
 export const app = express();
@@ -66,9 +68,12 @@ export async function initApp(): Promise<void> {
     res.json({ status: "ok", playerCount });
   });
 
+  const gameService = createGameService({ graph, playerLookup, clubsById });
+
   app.use("/api", createSeparationRouter(graph, playerLookup, searchService, clubsById));
   app.use("/api", createPlayersRouter(searchService, playerLookup, clubsById));
   app.use("/api", createClubsRouter(graph, playerLookup, clubsById));
+  app.use("/api", createGameRouter(gameService, playerLookup, clubsById));
 
   app.get("/{*splat}", (_req, res) => {
     res.sendFile(path.join(frontendDist, "index.html"));
