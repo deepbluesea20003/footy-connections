@@ -122,10 +122,16 @@ Built in `app.ts` (`initApp` loads the graph, then mounts routers): `/api/separa
 - **Web app** — root `Dockerfile`. `npm run build` then `node backend/dist/index.js`;
   serves `frontend/dist` + `/api/*` on `PORT` (8080 in container, 3000 in dev).
 - **Data population** — `backend/deploy-data-job.sh` builds `backend/Dockerfile.job`
-  with Cloud Build and runs it as a GCP Cloud Run Job. The job runs the three
-  download-only phases in sequence (`load-reep → import:tm → import:af`); it's a
-  clean full reload (~minutes), so just re-run to refresh. `--schedule` adds a
-  weekly auto-run; pass `DATABASE_URL=<branch-url>` to test against a Neon branch.
+  with Cloud Build and runs it as a GCP Cloud Run Job (`footy-data-import`). The job
+  runs the download-only phases in sequence (`load-reep → import:tm → import:af →
+  reconcile → recompute:pop`); it's a clean full reload (~minutes), so just re-run to
+  refresh. `--schedule` adds a weekly auto-run; pass `DATABASE_URL=<branch-url>` to
+  test against a Neon branch.
+- **Historical scrape** — the `footy-scrape` Cloud Run job runs `scrape:tm` over the
+  big-5 leagues back to ~1990 (reuses the same image, command overridden). It's
+  resumable (skips games already in the DB) but a task caps at 24h, so it needs
+  re-running. Two helpers: `backend/scrape-monitor.sh` (status snapshot any time) and
+  `backend/scrape-resume.sh` (re-execute if not already running — safe to schedule).
 
 ## Conventions
 
