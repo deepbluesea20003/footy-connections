@@ -22,6 +22,7 @@ import { Readable } from "node:stream";
 import { once } from "node:events";
 import { finished } from "node:stream/promises";
 import { loadReepMaps, canonicalId, type ReepMaps } from "../db/reep.js";
+import { pruneDanglingLineups } from "../db/lineups.js";
 import { directUrl } from "../db/pg-url.js";
 
 /** reep maps (canonical identity), loaded if load-reep.ts has run; else null. */
@@ -176,9 +177,13 @@ async function main() {
       if (!playerIds.has(r.player_id)) return null;
       const id = canon(r.player_id);
       if (emitted.has(id)) return null;
-      emitted.add(id);
       const name = r.name || `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim();
+      // Skip blank-name profiles WITHOUT claiming the canonical id, so a later
+      // profile mapping to the same id (with a real name) can still be emitted.
+      // Any id where every profile is nameless leaves dangling lineups that
+      // pruneDanglingLineups() removes below.
       if (!name) return null;
+      emitted.add(id);
       return [id, name, day(r.date_of_birth) || null, r.country_of_citizenship, r.image_url, r.highest_market_value_in_eur || null];
     });
   console.log(`[${ts()}] players: ${players.toLocaleString()}`);
@@ -189,6 +194,11 @@ async function main() {
     "clubs",
     (r) => (clubIds.has(r.club_id) ? [r.club_id, r.name] : null));
   console.log(`[${ts()}] clubs: ${clubs.toLocaleString()}`);
+
+  // Drop lineups for ids that never got a players row (blank-name/deduped
+  // profiles), so they can't become phantom teammate hubs in the graph.
+  const pruned = await pruneDanglingLineups(client);
+  console.log(`[${ts()}] pruned ${pruned.toLocaleString()} dangling lineup rows`);
 
   // Indexes + derived popularity.
   console.log(`[${ts()}] indexing + computing popularity…`);
