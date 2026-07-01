@@ -12,6 +12,12 @@ const TABS: Tab[] = [
   { id: "explorer", label: "Explore", icon: "🕸️" },
 ];
 
+const ACTIVE_CLASSES: Record<TabId, string> = {
+  game:        "bg-turf        text-[#061009] shadow-[0_8px_24px_-10px_rgba(21,224,129,0.5)]",
+  connections: "bg-electric    text-white      shadow-[0_8px_24px_-10px_rgba(21,101,255,0.5)]",
+  explorer:    "bg-whistle     text-[#0d0900]  shadow-[0_8px_24px_-10px_rgba(251,191,36,0.5)]",
+};
+
 interface Props {
   active: TabId;
   onChange: (id: TabId) => void;
@@ -30,7 +36,7 @@ export function TabBar({ active, onChange }: Props) {
               aria-current={isActive ? "page" : undefined}
               className={`relative flex-1 flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
                 isActive
-                  ? "bg-gradient-to-r from-turf to-electric text-[#04130c] shadow-[0_8px_24px_-10px_rgba(21,224,129,0.8)]"
+                  ? ACTIVE_CLASSES[tab.id]
                   : "text-kit-gray hover:text-kit-white hover:bg-pitch-lighter/60"
               }`}
             >

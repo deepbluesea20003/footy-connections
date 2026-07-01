@@ -1,29 +1,29 @@
 @import "tailwindcss";
 
 @theme {
-  /* Stadium base — deeper, richer navy/charcoal than the old flat black. */
-  --color-pitch: #060912;
-  --color-pitch-light: #0e1422;
-  --color-pitch-lighter: #1a2336;
-  --color-pitch-card: #0f1726;
-  --color-pitch-border: #243049;
+  /* Light "broadcast graphic" surfaces — bright, clean, bold. */
+  --color-pitch: #fbf8f0;          /* page base (warm off-white) */
+  --color-pitch-light: #ffffff;    /* cards & inputs */
+  --color-pitch-lighter: #eef1f7;  /* hover / secondary fills */
+  --color-pitch-card: #ffffff;
+  --color-pitch-border: #e3e0d4;   /* subtle warm border */
 
-  /* Primary accent — punchy electric turf, plus a cyan for the gradient pair. */
-  --color-turf: #15e081;
-  --color-turf-light: #5cf3ad;
-  --color-turf-dark: #0bb368;
-  --color-electric: #22d3ee;
-  --color-electric-dark: #0ea5c4;
+  /* Vibrant World Cup accents. */
+  --color-turf: #00b85c;           /* green */
+  --color-turf-light: #2edb81;
+  --color-turf-dark: #009a4c;
+  --color-electric: #1565ff;       /* bold blue */
+  --color-electric-dark: #1148c8;
+  --color-whistle: #ff7a00;        /* vivid orange */
+  --color-magenta: #ff2d8e;        /* hot pink */
+  --color-cyan: #00c2d6;           /* funky cyan */
+  --color-sun: #ffc400;            /* warm yellow */
 
-  /* Secondary accents. */
-  --color-whistle: #fbbf24;
-  --color-magenta: #f43f8e;
-
-  /* Foreground ramp. */
-  --color-kit-white: #f4f7fb;
-  --color-kit-gray: #9fb0c9;
-  --color-kit-dim: #647088;
-  --color-foul: #fb5a4b;
+  /* Ink ramp — dark text on light surfaces. */
+  --color-kit-white: #14182a;      /* primary text */
+  --color-kit-gray: #515a6e;       /* secondary text */
+  --color-kit-dim: #8b93a4;        /* tertiary text */
+  --color-foul: #e5342b;           /* red */
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -38,14 +38,7 @@ body {
   font-family: var(--font-sans);
   margin: 0;
   min-height: 100vh;
-  /* Layered stadium glow: a turf-green and an electric-cyan spotlight over a
-     deep vignette — the "broadcast overlay" feel. */
-  background-color: #060912;
-  background-image:
-    radial-gradient(1200px 680px at 18% -8%, rgba(21, 224, 129, 0.16), transparent 60%),
-    radial-gradient(1100px 700px at 92% 4%, rgba(34, 211, 238, 0.14), transparent 58%),
-    radial-gradient(900px 900px at 50% 120%, rgba(244, 63, 142, 0.08), transparent 60%);
-  background-attachment: fixed;
+  background-color: var(--color-pitch);
 }
 
 /* --- reusable look-and-feel utilities ----------------------------------- */
@@ -55,37 +48,36 @@ body {
   letter-spacing: -0.02em;
 }
 
-/* Electric green→cyan gradient text for headlines / hero numbers. */
+/* Bold flat accent text for headlines / hero numbers. */
 .text-gradient {
-  background: linear-gradient(100deg, var(--color-turf) 0%, var(--color-electric) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--color-turf);
 }
 
-/* Glassy card surface. */
+/* Clean white card surface — frosts over the colourful background. */
 .glass {
-  background: linear-gradient(180deg, rgba(20, 28, 46, 0.78), rgba(12, 18, 30, 0.78));
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(10px);
   border: 1px solid var(--color-pitch-border);
 }
 
 .card-glow {
-  box-shadow: 0 0 0 1px rgba(21, 224, 129, 0.12), 0 18px 50px -24px rgba(21, 224, 129, 0.4);
+  box-shadow:
+    0 14px 44px -18px rgba(20, 24, 42, 0.35),
+    0 2px 8px -4px rgba(20, 24, 42, 0.12);
 }
 
-/* Primary gradient button. */
+/* Primary flat button. */
 .btn-primary {
-  background: linear-gradient(100deg, var(--color-turf) 0%, var(--color-electric) 100%);
-  color: #04130c;
+  background: var(--color-turf);
+  color: #ffffff;
   font-weight: 700;
-  box-shadow: 0 10px 30px -12px rgba(21, 224, 129, 0.7);
+  box-shadow: 0 10px 26px -12px rgba(0, 184, 92, 0.6);
   transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
 }
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
   filter: brightness(1.06);
-  box-shadow: 0 16px 38px -12px rgba(21, 224, 129, 0.8);
+  box-shadow: 0 16px 34px -12px rgba(0, 184, 92, 0.7);
 }
 .btn-primary:active:not(:disabled) {
   transform: translateY(0);
@@ -118,8 +110,8 @@ body {
 }
 
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(21, 224, 129, 0.45); }
-  50% { box-shadow: 0 0 0 8px rgba(21, 224, 129, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 184, 92, 0.45); }
+  50% { box-shadow: 0 0 0 8px rgba(0, 184, 92, 0); }
 }
 .animate-glow {
   animation: glow-pulse 2s ease-in-out infinite;

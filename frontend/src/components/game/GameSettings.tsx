@@ -93,7 +93,7 @@ export function GameSettings({ initial, onApply, onClose }: Props) {
                   title={l.country}
                   className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
                     on
-                      ? "border-turf bg-gradient-to-r from-turf to-electric text-[#04130c]"
+                      ? "border-turf bg-turf text-[#061009]"
                       : "border-pitch-border bg-pitch-light/50 text-kit-gray hover:text-kit-white hover:border-turf/40"
                   }`}
                 >

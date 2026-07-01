@@ -33,7 +33,9 @@ export function ConnectionsTab() {
           Pick any two players and see the shortest chain of shared teammates between them.
         </p>
       </div>
-      <SearchForm onSearch={handleSearch} isLoading={state.status === "loading"} />
+      <div className="max-w-3xl mx-auto glass card-glow rounded-2xl p-5 sm:p-7">
+        <SearchForm onSearch={handleSearch} isLoading={state.status === "loading"} />
+      </div>
       <Results state={state} />
     </section>
   );

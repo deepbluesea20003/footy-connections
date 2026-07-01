@@ -40,6 +40,15 @@ function surname(name: string): string {
   return parts[parts.length - 1];
 }
 
+// Compact year span for a club spell, e.g. "2013–2021". Single-season spells
+// show the full season string ("2013-14"). Seasons arrive sorted ascending.
+function spellYears(stint: CareerStint): string {
+  if (stint.seasons.length <= 1) return stint.firstSeason || stint.lastSeason || "";
+  const start = (stint.firstSeason || stint.seasons[0] || "").slice(0, 4);
+  const end = (stint.lastSeason || stint.seasons[stint.seasons.length - 1] || "").slice(0, 4);
+  return start && end ? `${start}–${end}` : start || end;
+}
+
 // ── Chain breadcrumb ──────────────────────────────────────────────────────────
 
 interface ChainBreadcrumbProps {
@@ -123,7 +132,7 @@ function PlayerCard({ player, isGoal, isTip, disabled, onClick }: PlayerCardProp
   const stateClass = isTip
     ? "opacity-30 cursor-not-allowed border-pitch-border bg-pitch-light/30"
     : isGoal
-    ? "border-electric/60 bg-electric/10 hover:bg-electric/20 shadow-[0_0_12px_rgba(34,211,238,0.15)]"
+    ? "border-electric/60 bg-electric/10 hover:bg-electric/20 shadow-[0_0_12px_rgba(21,101,255,0.18)]"
     : disabled
     ? "opacity-40 cursor-not-allowed border-pitch-border bg-pitch-light/20"
     : "border-pitch-border bg-pitch-light/40 hover:border-turf/40 hover:bg-turf/5";
@@ -157,6 +166,8 @@ export function GamePane({ puzzle, disabled, onState }: Props) {
   const [squadLoading, setSquadLoading] = useState(false);
   const [squadNote, setSquadNote] = useState<string | null>(null);
   const [won, setWon] = useState(false);
+  // Which club spell has its season sub-picker open (clubId), if any.
+  const [expandedClubId, setExpandedClubId] = useState<string | null>(null);
 
   const tip = chain[chain.length - 1];
   const tipId = tip.playerId;
@@ -188,6 +199,7 @@ export function GamePane({ puzzle, disabled, onState }: Props) {
       setSelectedStint(null);
       setSquad(null);
       setSquadNote(null);
+      setExpandedClubId(null);
       setWon(false);
       return next;
     });
@@ -206,6 +218,7 @@ export function GamePane({ puzzle, disabled, onState }: Props) {
     setSelectedStint(null);
     setSquad(null);
     setSquadNote(null);
+    setExpandedClubId(null);
     const ctrl = new AbortController();
     getPlayer(tipId, ctrl.signal)
       .then((detail) => setCareer(detail.career.filter((s) => !!s.clubId)))
@@ -246,6 +259,21 @@ export function GamePane({ puzzle, disabled, onState }: Props) {
     }
   }
 
+  // Clicking a club chip: single-season spells load straight away; multi-season
+  // spells open a season sub-picker so the player chooses which year to use.
+  function handleClubClick(stint: CareerStint) {
+    if (!stint.clubId || disabled) return;
+    if (stint.seasons.length <= 1) {
+      setExpandedClubId(stint.clubId);
+      void pickStint(stint, stint.seasons[0] ?? stint.lastSeason);
+      return;
+    }
+    setExpandedClubId((prev) => (prev === stint.clubId ? null : stint.clubId));
+    setSelectedStint(null);
+    setSquad(null);
+    setSquadNote(null);
+  }
+
   async function pickPlayer(player: SquadPlayer) {
     if (!selectedStint || disabled || player.id === tipId) return;
     try {
@@ -278,7 +306,14 @@ export function GamePane({ puzzle, disabled, onState }: Props) {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const careerToShow = career ?? [];
+  // Oldest spell first → newest last, so the career reads as a clear timeline.
+  const careerToShow = (career ?? [])
+    .slice()
+    .sort(
+      (a, b) =>
+        (a.firstSeason || "").localeCompare(b.firstSeason || "") ||
+        (a.lastSeason || "").localeCompare(b.lastSeason || "")
+    );
 
   return (
     <div className="flex flex-col gap-5 p-4 sm:p-6">
@@ -331,31 +366,70 @@ export function GamePane({ puzzle, disabled, onState }: Props) {
           {!careerLoading && careerToShow.length > 0 && (
             <div>
               <p className="text-[10px] uppercase tracking-wider text-kit-dim mb-2">
-                {selectedStint ? "Season selected" : "Pick a season"}
+                {selectedStint ? "Season selected" : "Pick a club"}
               </p>
               <div className="flex flex-wrap gap-2">
-                {careerToShow.map((stint) =>
-                  stint.seasons.map((season) => {
-                    const isSelected =
-                      selectedStint?.clubId === stint.clubId && selectedStint?.season === season;
-                    return (
-                      <button
-                        key={`${stint.clubId}-${season}`}
-                        onClick={() => pickStint(stint, season)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                          isSelected
-                            ? "border-turf/60 bg-turf/10 text-turf"
-                            : "border-pitch-border bg-pitch-light/40 text-kit-white hover:border-turf/30 hover:bg-turf/5"
-                        }`}
-                      >
-                        <ClubBadge name={stint.club} crestUrl={stint.crestUrl} size={16} />
-                        <span className="truncate max-w-[120px]">{stint.club}</span>
-                        <span className="text-kit-dim shrink-0">{season}</span>
-                      </button>
-                    );
-                  })
-                )}
+                {careerToShow.map((stint) => {
+                  const isActive = selectedStint?.clubId === stint.clubId;
+                  const isExpanded = expandedClubId === stint.clubId;
+                  const multi = stint.seasons.length > 1;
+                  return (
+                    <button
+                      key={stint.clubId ?? stint.club}
+                      onClick={() => handleClubClick(stint)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                        isActive || isExpanded
+                          ? "border-turf/60 bg-turf/10 text-turf"
+                          : "border-pitch-border bg-pitch-light/40 text-kit-white hover:border-turf/30 hover:bg-turf/5"
+                      }`}
+                    >
+                      <ClubBadge name={stint.club} crestUrl={stint.crestUrl} size={16} />
+                      <span>{stint.club}</span>
+                      <span className="text-kit-dim shrink-0">{spellYears(stint)}</span>
+                      {multi && (
+                        <span className="text-kit-dim shrink-0 text-[10px]">
+                          {isExpanded ? "▾" : `· ${stint.seasons.length} seasons`}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
+
+              {/* Season sub-picker for the expanded multi-season club */}
+              {(() => {
+                const ex = expandedClubId
+                  ? careerToShow.find((s) => s.clubId === expandedClubId)
+                  : null;
+                if (!ex || ex.seasons.length <= 1) return null;
+                return (
+                  <div className="mt-3 rounded-lg border border-pitch-border bg-pitch-lighter/50 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-kit-dim mb-2">
+                      Which season at {ex.club}?
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {[...ex.seasons]
+                        .sort((a, b) => a.localeCompare(b))
+                        .map((season) => {
+                        const on = selectedStint?.clubId === ex.clubId && selectedStint?.season === season;
+                        return (
+                          <button
+                            key={season}
+                            onClick={() => pickStint(ex, season)}
+                            className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                              on
+                                ? "border-turf bg-turf text-white"
+                                : "border-pitch-border bg-pitch-light text-kit-white hover:border-turf/40 hover:bg-turf/5"
+                            }`}
+                          >
+                            {season}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
