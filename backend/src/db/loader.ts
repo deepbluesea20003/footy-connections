@@ -5,6 +5,7 @@ import { directUrl } from "./pg-url.js";
 import type { Player } from "../types/player.js";
 import type { BipartiteGraph, ClubSeasonNode } from "../types/graph.js";
 import { crestUrl, bigPortrait } from "../utils/image.js";
+import { markLoanStints } from "../utils/loans.js";
 
 /** Transfermarkt season is a start year ("2024"); render as "2024-25". */
 function seasonLabel(startYear: string | null): string {
@@ -97,6 +98,7 @@ export async function loadGraph(): Promise<{ players: Player[]; graph: Bipartite
     }
     for (const p of playerMap.values()) {
       p.clubs.sort((a, b) => (b.seasons[0] ?? "").localeCompare(a.seasons[0] ?? ""));
+      markLoanStints(p.clubs);
     }
 
     console.log(`✨ graph built: ${playerMap.size} players, ${nodeByKey.size} squad nodes, ${rows.toLocaleString()} appearances`);

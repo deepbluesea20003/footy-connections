@@ -5,144 +5,131 @@ the code changes.
 
 ## What this is
 
-**Football Separation Number** — find the shortest connection between any two
-footballers through shared teammates (a "six degrees" graph over club squads).
+**Football Separation Number** — a "six degrees" game over football squads: find
+the shortest chain between two players through shared *matchday squads*. The edge
+model is **co-appearance**: two players named in the same club's squad for the same
+game are teammates. So a connection is only ever shown if they genuinely played
+together.
 
-- `backend/` — Node 22 + Express 5 + TypeScript (ESM). Serves the API and, in
+- `backend/` — Node 22 + Express 5 + TypeScript (ESM). Serves `/api/*` and, in
   prod, the built frontend. Also home to the data-import scripts.
-- `frontend/` — React 19 + Vite 7 + Tailwind 4. Talks to `/api/*`.
+- `frontend/` — React 19 + Vite 7 + Tailwind 4. A 3-tab game; "build the chain"
+  (Play) is the primary mode.
 - npm **workspaces** (`backend`, `frontend`); root scripts proxy into them.
 
 Data lives in **Neon** (serverless Postgres). The graph is built **in memory at
-startup** from the DB (`backend/src/db/loader.ts` → `graph/build.ts`). If
-`DATABASE_URL` is unset, the app falls back to a small hardcoded seed
-(`backend/src/data/`), so it runs with zero infra for local UI work.
+startup** from the DB (`backend/src/db/loader.ts`). If `DATABASE_URL` is unset it
+falls back to a small hardcoded seed (`backend/src/data/`), so the UI runs with
+zero infra.
 
 ## Commands
 
-Run from repo root unless noted. Every data script loads `backend/.env`.
+Run from repo root unless noted. Data scripts load `backend/.env` (needs `DATABASE_URL`).
 
 ```bash
 npm run dev                 # backend (API + graph) on :3000
 npm run dev:frontend        # frontend on :5173 (Vite proxies /api → :3000)
-npm test                    # backend tests (vitest)
+npm test                    # backend tests (vitest, backend/tests/)
 npm run build               # build backend + frontend
-npm run status              # import progress snapshot (clubs / storage / counts)
 
-# Data pipeline (all need DATABASE_URL in backend/.env):
-npm run seed   --workspace=backend          # ~89 hardcoded players, bootstrap
-npm run fetch  --workspace=backend          # recent PL squads (FOOTBALL_DATA_API_KEY)
-npm run import:wikidata --workspace=backend  # deep global history (the big one)
-npm run enrich:reep     --workspace=backend  # stamp players with reep canonical IDs
-npm run enrich:wikidata --workspace=backend  # sitelinks/photo/nationality → search ranking
-npm run enrich:crests   --workspace=backend  # club crests (football-data.org → Wikidata P154)
+# Data pipeline — run in this order (each is a clean, idempotent full reload):
+npm run load:reep   --workspace=backend  # CC0 identity register → canonical player ids
+npm run import:tm   --workspace=backend  # Transfermarkt CSVs: top divisions + cups
+npm run import:af   --workspace=backend  # API-Football bulk: lower tiers, merged via reep
+npm run reconcile   --workspace=backend  # fold DOB-less orphan nodes into their reep node (--apply)
+npm run recompute:pop --workspace=backend # search ranking: market value, else Big-5 appearances
+npm run scrape:tm   --workspace=backend  # optional: scrape EFL/lower tiers from Transfermarkt (ToS-grey)
 ```
 
-## The data pipeline (the important/complex part)
+## The data layer (the important part)
 
-`import:wikidata` (`backend/src/scripts/fetch-from-wikidata.ts`) is a long-running,
-**fully resumable** batch importer. Everything below is why it's structured the
-way it is — don't "simplify" these away:
+Everything is **co-appearance from `game_lineups`** (a player in a club's squad for
+a game). The graph hub is keyed `gameId::clubId`, so two players share a hub iff
+they were in the same squad for the same game — see `loader.ts` / `graph/build.ts`.
 
-- **Two phases, both checkpointed in Neon.** `discovery` enumerates every football
-  club with ≥ `MIN_CLUB_MEMBERS` squad members into `import_club_queue`;
-  `processing` works that queue most-notable-first, pulling each club's full P54
-  membership history, expanding date ranges into seasons, and upserting
-  `players` / `player_external_ids` / `player_club_seasons`.
-- **Idempotent + resumable.** Every write is `ON CONFLICT DO NOTHING/UPDATE`; each
-  club is an atomic checkpoint. Kill it (SIGTERM / crash / Cloud Run preemption)
-  and re-run — it picks up from the queue. `main()` also retries transient
-  DB/network blips.
-- **Storage-budget capped.** Processing stops once `pg_database_size` approaches
-  `MAX_DB_BYTES` (~440 MB) so it stays inside Neon's free tier and imports the
-  most-connected clubs first.
-- **Identity resolution.** Players dedupe across sources via
-  `backend/src/db/player-identity.ts` — keyed on Wikidata QID and on
-  normalized name + date_of_birth. The DB is always kept a superset of the
-  in-memory cache so FKs can't dangle.
-- **Tunables (env):** `MIN_CLUB_MEMBERS`, `MIN_SEASON_YEAR`, `MAX_DB_BYTES`,
-  `WIKIDATA_DELAY_MS`, `PROCESS_BATCH`, `PROCESS_LIMIT`, `WIKIDATA_UA`,
-  `CURRENT_SEASON_START_YEAR`.
-- **Reset for a clean re-import:** `TRUNCATE import_club_queue; DELETE FROM import_jobs;`
+**Sources, fused into one graph:**
+- **Transfermarkt open CSVs** (`import-transfermarkt.ts`) — top divisions + cups.
+  The spine: brings faces (`image_url`), `market_value`, DOB, nationality.
+- **API-Football bulk** (`import-api-football.ts`) — lower tiers TM doesn't cover
+  (`AF_LEAGUE_IDS`). Appends to the same tables.
+- **Transfermarkt scraper** (`scrape-transfermarkt.ts`) — optional EFL/lower-tier
+  fill using TM's own ids (same id space as `import:tm`, so no cross-source
+  resolution needed). Heavy + ToS-grey; run as a background job, not casually.
 
-### Search-ranking enrichment
+**Identity fusion — reep** (`db/reep.ts`, `load-reep.ts`): the
+[reep](https://github.com/withqwerty/reep) CC0 register maps each provider's player
+id (`key_transfermarkt`, `key_api_football`) to one shared `reep_id`.
+`canonicalId(maps, source, sourceId)` returns that `reep_id` (so the same person
+across TM + API-Football collapses to one node) **or a source-prefixed fallback**
+(`tr:<id>`, `ap:<id>`) when reep doesn't know the id. This fallback is where
+duplicates come from — see gotchas.
 
-`enrich:wikidata` (`backend/src/scripts/enrich-from-wikidata.ts`) is a separate,
-short (~20 min) pass that makes search return the *notable* player first (the real
-Pelé, not his namesakes). Keyed on the QID already in `player_external_ids`, it
-batches SPARQL to fetch per player: `sitelinks` (Wikipedia language-edition count
-= fame proxy), `image_file` (Commons P18 photo), and `nationality` (P27). It then
-computes `players.popularity` = `log(1+sitelinks)` + a light career/recency term
-from `player_club_seasons`. `search()` ([`services/player-search.ts`]) orders every
-match tier by `popularity`, so same-name collisions resolve fame-first.
+### Schema (authoritative version)
 
-- **Idempotent + resumable.** Only rows with `sitelinks IS NULL` are fetched;
-  missing entities are stamped `0` so they aren't retried. Re-run any time;
-  `--recompute` redoes only the popularity blend (after tuning weights), no
-  network. Tunables: `ENRICH_BATCH`, `ENRICH_CHUNK`, `ENRICH_LIMIT`, `WIKIDATA_DELAY_MS`.
-- **Photos are hotlinked, not stored.** We persist only the Commons filename and
-  build a sized `Special:FilePath` thumbnail URL at request time (`utils/image.ts`)
-  — zero storage/egress cost.
+The live schema is created by `import-transfermarkt.ts` → `ensureSchema()` (it
+`DROP`s and recreates on each run). The tables that matter:
+`players` (canonical `id` = reep_id or `tr:`/`ap:` fallback; `name`, `date_of_birth`,
+`nationality`, `image_url`, `market_value`, `popularity`) · `clubs` · `games`
+(competition, `season` = start year, date, home/away, `source`) · `game_lineups`
+(the edge source: `game_id`, `club_id`, `player_id`, `type`). reep lookup tables:
+`reep_people`, `reep_map`.
+
+> `backend/src/db/schema.sql` is **legacy** (describes an older Wikidata-era shape,
+> incl. `player_club_seasons` / `player_external_ids` / `import_*`) — don't trust it.
+> The trigram search index is applied at runtime by `db/search-schema.ts`.
+
+### Search ranking
+
+`DbPlayerSearchService` (`services/db-player-search.ts`) runs search **in Postgres**
+(pg_trgm). A candidate must match *every* query token (word-prefix or word-similar,
+both on the GIN trigram index), then results are ranked by relevance tier
+(exact > full-prefix > all-tokens-prefix > fuzzy), word similarity, then
+`popularity`. So same-name collisions (the several "Pelé"s) resolve fame-first.
+`popularity = ln(1 + market_value)` — note this is **0 for any player without a
+market value** (old players, most lower-tier/API-Football rows).
+`InMemoryPlayerSearchService` is the no-DB fallback (seed data + tests).
+
+### Images (derived, never stored)
+
+`utils/image.ts`: player portraits are Transfermarkt URLs upgraded to the `big`
+variant (`bigPortrait`); club crests are derived from the TM club id (`crestUrl`).
+Zero storage/egress.
 
 ### Gotchas
 
-- **Wikidata is dirty.** P54 dates can be vandalized/garbage (URLs where a date
-  belongs, absurd end-years that create phantom teammate hubs). `validDate()` and
-  `seasonsBetween()` (`utils/season.ts`, bounded by `MIN_SEASON_YEAR` /
-  `CURRENT_SEASON_START_YEAR`) exist to bound this — keep them.
-- **Neon serverless driver is HTTP-per-query.** Big reads must paginate;
-  `loader.ts` cursor-paginates the ~1M-row join on the full ORDER BY tuple
-  because a single query can be truncated by the driver. Don't collapse it.
-- **SPARQL is rate-limited.** `WIKIDATA_DELAY_MS` between requests + 429/Retry-After
-  backoff. Be polite; keep the descriptive `User-Agent`.
+- **Duplicate players come from the reep fallback.** When reep can't resolve a
+  provider id it mints a standalone `tr:`/`ap:` node. API-Football is the weak spot
+  (its rows have no DOB and mostly fail reep), so a player can split into a rich
+  reep node + a bare `ap:` node — this breaks chains through their lower-league
+  spell. Name+DOB dedup can't catch it (no DOB on the `ap:` side).
+- **Career timeline has no loan flag.** `loader.ts` groups `game_lineups` by
+  club+season; a loan just appears as real appearances for the loan club, so loan
+  spells overlap the parent-club block.
+- **Neon serverless driver is HTTP-per-query.** `loader.ts` uses a direct `pg`
+  connection + server-side cursor (`pg-query-stream`) to stream the multi-million-row
+  join in one query; the HTTP driver would need hundreds of paginated round-trips
+  and can truncate large reads. Imports use `directUrl()` + `pg` COPY for the same reason.
+- **Scraper is rate-limited + ToS-grey.** Keep the delay and descriptive UA.
 
-## Schema
+## API
 
-`backend/src/db/schema.sql` (also self-created by scripts via `ensureSchema`):
-`players` (slug PK, dedup key = name+dob) · `player_external_ids`
-(per-source provider IDs) · `clubs` · `player_club_seasons` (the graph edges).
-Importer bookkeeping: `import_jobs` (phase/cursor), `import_club_queue` (work queue).
-`players.reep_id` is added later by `enrich:reep`; `players.sitelinks` /
-`image_file` / `popularity` by `enrich:wikidata` (search ranking);
-`clubs.crest_url` by `enrich:crests` (connection-UI crests). UI detail comes from
-`GET /api/players/:id` (career timeline) and `GET /api/clubs/:id/squad?season=`
-(roster), both served in-memory from the graph + player/club maps.
+Built in `app.ts` (`initApp` loads the graph, then mounts routers): `/api/separation`
+(shortest path + graph explore), `/api/players` (search + `/:id` career timeline),
+`/api/clubs` (`/:id/squad?season=`), `/api/game` (Play mode; `services/game.ts`).
 
-## Running the importer in the cloud (free, hands-off)
+## Deploy
 
-Don't fill the DB from a laptop. The importer is meant to run as a **GCP Cloud Run
-Job**, built by **Cloud Build** (no local Docker needed) from
-`backend/Dockerfile.job`.
-
-```bash
-gcloud auth login && gcloud config set project YOUR_PROJECT_ID
-./backend/deploy-importer.sh              # build → push → create job → execute once
-./backend/deploy-importer.sh --schedule   # also add a daily Cloud Scheduler trigger
-./backend/deploy-importer.sh --once       # just re-execute an already-deployed job
-```
-
-The job is resumable and self-limiting, so "kick off and walk away" works: a run
-fills toward the storage budget and exits; re-running (or the daily schedule)
-resumes until the queue is drained. Watch progress with `npm run status` locally,
-or job logs in the Cloud Run console. See `backend/deploy-importer.sh` header for
-all knobs (region, memory, image names) and free-tier notes.
-
-Each run does **two phases** (`Dockerfile.job` CMD): the importer, then
-`enrich:wikidata`, so newly-imported players get their search signals (sitelinks /
-photo / nationality) and `popularity` is recomputed every run. Both are resumable
-and the enrichment only fetches players it hasn't seen, so the incremental cost is
-small. Redeploy (`./backend/deploy-importer.sh`) to pick up the updated image.
-
-## Web app deploy
-
-The API+frontend server image is the root `Dockerfile` (separate from the importer
-job). `npm run build` then `node backend/dist/index.js`; serves `frontend/dist`
-and `/api/*`. Listens on `PORT` (8080 in the container, 3000 in dev).
+- **Web app** — root `Dockerfile`. `npm run build` then `node backend/dist/index.js`;
+  serves `frontend/dist` + `/api/*` on `PORT` (8080 in container, 3000 in dev).
+- **Data population** — `backend/deploy-data-job.sh` builds `backend/Dockerfile.job`
+  with Cloud Build and runs it as a GCP Cloud Run Job. The job runs the three
+  download-only phases in sequence (`load-reep → import:tm → import:af`); it's a
+  clean full reload (~minutes), so just re-run to refresh. `--schedule` adds a
+  weekly auto-run; pass `DATABASE_URL=<branch-url>` to test against a Neon branch.
 
 ## Conventions
 
-- ESM throughout; **imports use `.js` extensions** for local files (TS compiled to
-  ESM) — e.g. `import { sql } from "./connection.js"`.
+- ESM throughout; **local imports use `.js` extensions** (TS compiled to ESM).
 - Scripts read env via `tsx --env-file=.env`; never hardcode secrets. `DATABASE_URL`
   is the one required secret.
 - Tests live in `backend/tests/` (vitest). Run `npm test` before declaring done.
