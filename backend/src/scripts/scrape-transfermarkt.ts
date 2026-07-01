@@ -1,17 +1,28 @@
 /**
- * Extends the dataset with leagues the open Transfermarkt CSVs don't cover
- * (lower tiers — English EFL, plus lower divisions of any country) by scraping
- * matchday lineups directly from Transfermarkt.
+ * Extends the dataset with lineups the open Transfermarkt CSVs don't cover —
+ * lower tiers (English EFL etc.) and, above all, HISTORICAL depth: pre-2012
+ * big-5 seasons the published CSVs stop short of — by scraping matchday lineups
+ * directly from Transfermarkt.
  *
- * Because it uses Transfermarkt's own ids — the SAME id space as the CSV import
- * (import-transfermarkt.ts) — a player who appears in, say, the Championship
- * here and the Premier League in the CSVs is automatically the same node. No
- * cross-source identity resolution (reep et al.) is needed; that only becomes
- * relevant if we ever add a non-Transfermarkt provider.
+ * Identity fusion goes through reep, exactly like import-transfermarkt.ts. Both
+ * scripts read Transfermarkt's own numeric ids, but those are canonicalized via
+ * `canonicalId(reep, "transfermarkt", tmId)` before they touch `players` /
+ * `game_lineups` — yielding a shared `reep_…` id when reep knows the player (so
+ * the same person collapses to one node across CSV import + scrape) or a
+ * `tr:<tmId>` fallback otherwise. Writing bare numeric ids here (as an earlier
+ * version did) created DISJOINT nodes that never linked to a player's modern
+ * self, so we must mirror the importer's canonicalization. If the reep tables
+ * are absent we warn and fall back to canonicalId's `tr:` prefix — never a bare
+ * numeric id.
  *
  * Edge basis stays co-appearance: two players named in the same club's matchday
  * squad for a game. For each competition+season it reads the fixtures page for
  * match ids, then each match's lineup page for the squads.
+ *
+ * Scraped `games`/`game_lineups` share the raw TM match-id space with the CSV
+ * import, so `ON CONFLICT (id) DO NOTHING` de-dupes cleanly. Scraped games are
+ * stamped `source = 'tm-scrape'` (the CSV importer uses 'tm') so the two are
+ * distinguishable.
  *
  * Polite + resumable: rate-limited, and matches already in `games` are skipped,
  * so it can be killed and re-run. Scraping is heavy and ToS-grey — run it as a
@@ -23,6 +34,7 @@
  * Run: DATABASE_URL=... npm run scrape:tm --workspace=backend
  */
 import { Client } from "pg";
+import { loadReepMaps, canonicalId, type ReepMaps } from "../db/reep.js";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -48,6 +60,20 @@ function seasons(): number[] {
 
 const ts = () => new Date().toISOString().slice(11, 19);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** reep maps (canonical identity), loaded if load-reep.ts has run; else null.
+ *  Mirrors import-transfermarkt.ts so scraped players fuse with CSV-imported
+ *  ones instead of forming disjoint nodes. */
+async function tryLoadReep(client: Client): Promise<ReepMaps | null> {
+  try {
+    const maps = await loadReepMaps(client);
+    console.log(`[${ts()}] reep: ${maps.toReep.size.toLocaleString()} id mappings loaded`);
+    return maps;
+  } catch {
+    console.warn(`[${ts()}] reep tables not found — using source-prefixed ids (run load:reep first to fuse sources)`);
+    return null;
+  }
+}
 const titleize = (slug: string) =>
   slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 
@@ -124,6 +150,9 @@ async function main() {
   await client.connect();
   console.log(`[${ts()}] scraping comps ${COMPS.join(",")} seasons ${seasons().join(",")}`);
 
+  const reep = await tryLoadReep(client);
+  const canon = (tmId: string) => canonicalId(reep, "transfermarkt", tmId);
+
   let scraped = 0;
   for (const comp of COMPS) {
     for (const season of seasons()) {
@@ -152,21 +181,23 @@ async function main() {
           `INSERT INTO clubs (id, name) VALUES ($1,$2),($3,$4) ON CONFLICT (id) DO NOTHING`,
           [lineup.homeClubId, fx.homeName, lineup.awayClubId, fx.awayName]
         );
-        // game
+        // game (source distinguishes scraped rows from the CSV import's 'tm')
         await client.query(
-          `INSERT INTO games (id, competition_id, season, home_club_id, away_club_id, home_club_name, away_club_name)
-           VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
-          [fx.matchId, comp, String(season), lineup.homeClubId, lineup.awayClubId, fx.homeName, fx.awayName]
+          `INSERT INTO games (id, competition_id, season, home_club_id, away_club_id, home_club_name, away_club_name, source)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+          [fx.matchId, comp, String(season), lineup.homeClubId, lineup.awayClubId, fx.homeName, fx.awayName, "tm-scrape"]
         );
-        // players (don't overwrite richer CSV rows) + lineups
+        // players + lineups — canonicalize the raw TM id through reep so scraped
+        // players fuse with their CSV selves (ON CONFLICT keeps richer CSV rows).
         for (const r of lineup.rows) {
+          const pid = canon(r.playerId);
           await client.query(
             `INSERT INTO players (id, name, image_url) VALUES ($1,$2,$3) ON CONFLICT (id) DO NOTHING`,
-            [r.playerId, r.name, r.imageUrl]
+            [pid, r.name, r.imageUrl]
           );
           await client.query(
             `INSERT INTO game_lineups (game_id, club_id, player_id, type) VALUES ($1,$2,$3,$4)`,
-            [fx.matchId, r.clubId, r.playerId, r.type]
+            [fx.matchId, r.clubId, pid, r.type]
           );
         }
         scraped++;
