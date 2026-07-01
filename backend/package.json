@@ -13,6 +13,8 @@
     "load:reep": "tsx --env-file=.env src/scripts/load-reep.ts",
     "import:tm": "tsx --env-file=.env src/scripts/import-transfermarkt.ts",
     "import:af": "tsx --env-file=.env src/scripts/import-api-football.ts",
+    "reconcile": "tsx --env-file=.env src/scripts/reconcile-identities.ts",
+    "recompute:pop": "tsx --env-file=.env src/scripts/recompute-popularity.ts",
     "scrape:tm": "tsx --env-file=.env src/scripts/scrape-transfermarkt.ts"
   },
   "dependencies": {

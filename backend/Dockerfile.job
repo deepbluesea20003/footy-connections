@@ -25,7 +25,10 @@ COPY --from=build /app/backend/dist backend/dist
 #   1. load-reep            — the CC0 identity register (canonical player ids)
 #   2. import-transfermarkt — top divisions + cups (faces, market value, history)
 #   3. import-api-football  — lower tiers (AF_LEAGUE_IDS), merged via reep
+#   4. reconcile-identities — fold DOB-less orphan nodes into their reep node
+#                             (fixes same-person-split-in-two, e.g. Shane Long)
+#   5. recompute-popularity — search ranking (market value, else Big-5 appearances)
 # Tune scope via job env: AF_LEAGUE_IDS (lower-tier league ids), AF_MIN_SEASON,
 # TM_COMP_TYPES, AF_FIXTURE_PLAYERS_URL (point at a GCS mirror to avoid GitHub LFS
 # bandwidth limits on repeated runs).
-CMD ["sh", "-c", "node backend/dist/scripts/load-reep.js && node backend/dist/scripts/import-transfermarkt.js && node backend/dist/scripts/import-api-football.js"]
+CMD ["sh", "-c", "node backend/dist/scripts/load-reep.js && node backend/dist/scripts/import-transfermarkt.js && node backend/dist/scripts/import-api-football.js && node backend/dist/scripts/reconcile-identities.js --apply && node backend/dist/scripts/recompute-popularity.js"]

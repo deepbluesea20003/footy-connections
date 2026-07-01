@@ -3,6 +3,9 @@ export interface ClubStint {
   /** Transfermarkt club id (used to derive the crest URL). */
   clubId?: string;
   seasons: string[];
+  /** True when this looks like a loan spell (a short stint nested inside a longer
+   *  concurrent stint at another club). Heuristic, display-only. */
+  loan?: boolean;
 }
 
 export interface Player {

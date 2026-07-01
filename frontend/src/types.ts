@@ -28,6 +28,7 @@ export interface CareerStint {
   seasons: string[];
   firstSeason: string;
   lastSeason: string;
+  loan?: boolean;
 }
 
 export interface PlayerDetail {

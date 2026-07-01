@@ -386,6 +386,9 @@ export function GamePane({ puzzle, disabled, onState }: Props) {
                       <ClubBadge name={stint.club} crestUrl={stint.crestUrl} size={16} />
                       <span>{stint.club}</span>
                       <span className="text-kit-dim shrink-0">{spellYears(stint)}</span>
+                      {stint.loan && (
+                        <span className="shrink-0 text-[10px] italic text-kit-dim">(loan)</span>
+                      )}
                       {multi && (
                         <span className="text-kit-dim shrink-0 text-[10px]">
                           {isExpanded ? "▾" : `· ${stint.seasons.length} seasons`}
