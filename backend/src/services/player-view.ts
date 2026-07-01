@@ -8,6 +8,8 @@ export interface CareerStint {
   seasons: string[];
   firstSeason: string;
   lastSeason: string;
+  /** Heuristically a loan spell (see markLoanStints). Display-only. */
+  loan: boolean;
 }
 
 /** A player's clubs as a career timeline, most-recent first, with crests. */
@@ -23,6 +25,7 @@ export function playerCareer(player: Player, clubs: Map<string, ClubInfo>): Care
         seasons,
         firstSeason: seasons[0] ?? "",
         lastSeason: seasons[seasons.length - 1] ?? "",
+        loan: stint.loan ?? false,
       };
     })
     .sort((a, b) => b.lastSeason.localeCompare(a.lastSeason));

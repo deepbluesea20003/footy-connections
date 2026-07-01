@@ -4,10 +4,12 @@
 #
 # Each run rebuilds the co-appearance dataset from DOWNLOADS ONLY (reep + the
 # Transfermarkt CSVs + the API-Football bulk dataset) — no scraping, so there's
-# no IP-block / anti-bot risk. Three sequential, idempotent phases:
+# no IP-block / anti-bot risk. Five sequential, idempotent phases:
 #   1. load-reep            — CC0 identity register (canonical player ids)
 #   2. import-transfermarkt — top divisions + cups (faces, market value, history)
 #   3. import-api-football  — lower tiers (AF_LEAGUE_IDS), merged into one graph via reep
+#   4. reconcile-identities — fold DOB-less orphan nodes into their reep node
+#   5. recompute-popularity — search ranking (market value, else Big-5 appearances)
 # It's a clean full reload (~minutes), not a checkpointed resume, so just re-run
 # to refresh; safe to run repeatedly.
 #
