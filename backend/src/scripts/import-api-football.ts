@@ -26,6 +26,7 @@ import { finished } from "node:stream/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadReepMaps, canonicalId, type ReepMaps } from "../db/reep.js";
+import { pruneDanglingLineups } from "../db/lineups.js";
 import { directUrl } from "../db/pg-url.js";
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -166,6 +167,12 @@ async function main() {
   await insertBatched("clubs", `INSERT INTO clubs (id, name) VALUES %VALUES% ON CONFLICT (id) DO NOTHING`, clubRows);
 
   await client.query(`UPDATE players SET popularity = ln(1 + COALESCE(market_value, 0)) WHERE popularity IS NULL`);
+
+  // Belt-and-braces: drop any lineup (from either source) whose player_id has no
+  // players row, so the graph never rosters an unknown id. See db/lineups.ts.
+  const pruned = await pruneDanglingLineups(client);
+  console.log(`[${ts()}] pruned ${pruned.toLocaleString()} dangling lineup rows`);
+
   console.log(`[${ts()}] DONE — +${nGames.toLocaleString()} games, +${nLineups.toLocaleString()} lineups, +${need.size.toLocaleString()} players (lower tiers)`);
   await client.end();
 }

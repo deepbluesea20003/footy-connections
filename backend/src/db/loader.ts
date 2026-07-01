@@ -5,13 +5,8 @@ import { directUrl } from "./pg-url.js";
 import type { Player } from "../types/player.js";
 import type { BipartiteGraph, ClubSeasonNode } from "../types/graph.js";
 import { crestUrl, bigPortrait } from "../utils/image.js";
+import { ingestLineupRow, type LineupRow } from "./lineup-ingest.js";
 import { markLoanStints } from "../utils/loans.js";
-
-/** Transfermarkt season is a start year ("2024"); render as "2024-25". */
-function seasonLabel(startYear: string | null): string {
-  const y = parseInt(String(startYear), 10);
-  return Number.isFinite(y) ? `${y}-${String((y + 1) % 100).padStart(2, "0")}` : String(startYear ?? "");
-}
 
 /**
  * Loads the whole dataset and builds the co-appearance graph in one streaming
@@ -61,36 +56,12 @@ export async function loadGraph(): Promise<{ players: Player[]; graph: Bipartite
     );
 
     let rows = 0;
-    for await (const row of stream as AsyncIterable<{ player_id: string; game_id: string; club_id: string; club: string; season: string; date: string | null; competition_id: string | null }>) {
-      const season = seasonLabel(row.season);
-      const key = `${row.game_id}::${row.club_id}`;
-      let node = nodeByKey.get(key);
-      if (!node) {
-        node = { gameId: row.game_id, club: row.club, clubId: row.club_id, season, date: row.date ?? undefined, competition: row.competition_id ?? undefined, roster: [] };
-        nodeByKey.set(key, node);
-      }
-      node.roster.push(row.player_id);
-
-      let nodes = playerToSeasons.get(row.player_id);
-      if (!nodes) {
-        nodes = [];
-        playerToSeasons.set(row.player_id, nodes);
-      }
-      nodes.push(node);
-
-      // Career timeline: distinct club + seasons the player actually appeared in.
-      const p = playerMap.get(row.player_id);
-      if (p) {
-        let stint = p.clubs.find((s) => s.clubId === row.club_id);
-        if (!stint) {
-          stint = { club: row.club, clubId: row.club_id, seasons: [] };
-          p.clubs.push(stint);
-        }
-        if (!stint.seasons.includes(season)) stint.seasons.push(season);
-      }
-
+    let skipped = 0;
+    for await (const row of stream as AsyncIterable<LineupRow>) {
+      if (!ingestLineupRow(row, playerMap, nodeByKey, playerToSeasons)) skipped++;
       if (++rows % 500000 === 0) console.log(`📄 ${rows.toLocaleString()} lineup rows…`);
     }
+    if (skipped) console.warn(`⚠️  skipped ${skipped.toLocaleString()} dangling lineup rows (player_id not in players — run pruneDanglingLineups)`);
 
     // Surface the most recent shared game first when reconstructing a path.
     for (const nodes of playerToSeasons.values()) {
